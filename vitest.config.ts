@@ -3,7 +3,9 @@ import path from 'node:path';
 
 export default defineConfig({
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
-  // jsdom gives the export modules a DOM to touch at import time; the geometry
-  // and unit suites are environment-agnostic.
-  test: { environment: 'jsdom', include: ['src/**/*.test.ts'] },
+  // The kernels under test are pure — they touch the DOM only inside functions
+  // the suite never calls (canvas rendering, file downloads). Running in plain
+  // Node keeps the suite fast and avoids depending on jsdom, whose bundled
+  // undici breaks against some Node versions.
+  test: { environment: 'node', include: ['src/**/*.test.ts'] },
 });
