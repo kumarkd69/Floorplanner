@@ -40,6 +40,22 @@ Asset paths in the build are relative, so `dist/` can be dropped anywhere —
 a domain root, a GitHub Pages project site, or an S3 prefix — without
 reconfiguration.
 
+## Publishing to GitHub Pages
+
+`.github/workflows/deploy-pages.yml` builds and publishes the app on every push
+to the default branch. It needs Pages switched on once, by hand:
+
+1. **Settings → Pages → Build and deployment → Source: _GitHub Actions_**
+2. **Actions → Deploy to GitHub Pages → Run workflow** (or push any commit)
+
+The site then appears at **https://kumarkd69.github.io/Floorplanner/**.
+
+That first step cannot be automated: creating a Pages site requires admin
+permissions the workflow token is not granted, so `actions/configure-pages`
+with `enablement: true` fails with *Resource not accessible by integration*.
+Until Pages is enabled, the workflow's "Configure Pages" step is expected to
+fail; every step before it (tests, type-check, build) still runs and passes.
+
 ## What it does
 
 **Drawing.** Straight, angled and curved walls that chain as you click and weld
