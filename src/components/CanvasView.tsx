@@ -2,12 +2,22 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { render } from '@/render/renderer';
 import { store } from '@/state/store';
 import { useElementSize } from '@/hooks/useElementSize';
-import { useCanvasInteraction, type InteractionApi } from '@/hooks/useCanvasInteraction';
+import {
+  useCanvasInteraction,
+  type ContextMenuState,
+  type Readout,
+} from '@/hooks/useCanvasInteraction';
 import { useViewportControls } from '@/hooks/useViewportControls';
 import { Rulers } from './Rulers';
 
+/**
+ * What the canvas exposes to the rest of the app.
+ *
+ * Deliberately only the things that change rarely. Per-frame values (overlay,
+ * cursor, readout) never travel through here — publishing those upward is what
+ * previously drove an infinite render loop.
+ */
 export interface CanvasHandle {
-  api: InteractionApi;
   size: { width: number; height: number };
   controls: ReturnType<typeof useViewportControls>;
 }
@@ -20,7 +30,15 @@ export interface CanvasHandle {
  * repainting once per animation frame — regardless of how many mutations
  * landed — is what keeps interaction at 60 FPS with thousands of objects.
  */
-export function CanvasView({ onReady }: { onReady: (h: CanvasHandle) => void }) {
+export function CanvasView({
+  onReady,
+  onReadout,
+  onContextMenu,
+}: {
+  onReady: (h: CanvasHandle) => void;
+  onReadout: (r: Readout) => void;
+  onContextMenu: (s: ContextMenuState | null) => void;
+}) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
@@ -29,7 +47,9 @@ export function CanvasView({ onReady }: { onReady: (h: CanvasHandle) => void }) 
   const [dropActive, setDropActive] = useState(false);
   const [showRulers, setShowRulers] = useState(true);
 
-  const api = useCanvasInteraction(canvas);
+  // Stable so the interaction hook never re-subscribes.
+  const callbacks = useMemo(() => ({ onReadout, onContextMenu }), [onReadout, onContextMenu]);
+  const api = useCanvasInteraction(canvas, callbacks);
   const controls = useViewportControls(canvas, size);
 
   // Mark dirty on any store change; the loop below decides when to paint.
@@ -48,7 +68,7 @@ export function CanvasView({ onReady }: { onReady: (h: CanvasHandle) => void }) 
     return unsub;
   }, []);
 
-  const handle = useMemo(() => ({ api, size, controls }), [api, size, controls]);
+  const handle = useMemo(() => ({ size, controls }), [size, controls]);
   useLayoutEffect(() => {
     onReady(handle);
   }, [handle, onReady]);

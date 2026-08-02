@@ -12,54 +12,78 @@ import {
   segmentIntersection,
   signedArea,
 } from '../geometry';
-import { formatArea, formatLength, fromMM, niceGridStep, parseLength, toMM } from '../units';
+import {
+  feetOf,
+  formatArea,
+  formatLength,
+  fromMM,
+  mmOfFeet,
+  niceGridStep,
+  parseArea,
+  parseLength,
+  toMM,
+} from '../units';
 import { classifyRoom, detectEnclosures } from '../rooms';
 import { clampOpeningT, openingsOverlap, wallLength, wallOutline } from '../entities';
 import { mergeWalls, splitWall, weldWallJoints } from '../wallOps';
 import { snapPoint } from '../snapping';
 import { createProject } from '@/state/project';
 import { toDXF } from '@/export/dxf';
+import {
+  buildRoomBox,
+  clampRectToPlot,
+  findPlot,
+  resizeRoomBox,
+  roomRect,
+  setRoomArea,
+} from '../roomBox';
+import { mm2OfSqft, sqftOf } from '../units';
 import { MM_PER_CSS_PX, scaleDenominator } from '@/export';
 import type { Project, Wall } from '@/types';
 
 /* ------------------------------------------------------------------ units */
 
 describe('units', () => {
-  it('round-trips through millimetres', () => {
-    for (const unit of ['ft', 'in', 'm', 'cm'] as const) {
-      expect(fromMM(toMM(12.5, unit), unit)).toBeCloseTo(12.5, 9);
-    }
+  it('round-trips feet through millimetres', () => {
+    expect(fromMM(toMM(12.5))).toBeCloseTo(12.5, 9);
+    expect(mmOfFeet(10)).toBeCloseTo(3048, 9);
+    expect(feetOf(3048)).toBeCloseTo(10, 9);
   });
 
-  it('formats imperial lengths in architectural notation', () => {
-    expect(formatLength(304.8, 'ft')).toBe("1'-0\"");
-    expect(formatLength(304.8 * 12 + 25.4 * 6, 'ft')).toBe("12'-6\"");
-    expect(formatLength(25.4 * 6.5, 'ft')).toBe("0'-6 1/2\"");
-  });
-
-  it('formats metric lengths as decimals', () => {
-    expect(formatLength(2500, 'm')).toBe('2.5 m');
-    expect(formatLength(2500, 'cm')).toBe('250 cm');
+  it('formats every length in feet and nothing else', () => {
+    expect(formatLength(304.8)).toBe("1'");
+    expect(formatLength(304.8 * 12 + 25.4 * 6)).toBe("12.5'");
+    expect(formatLength(25.4 * 6)).toBe("0.5'");
+    // Metric input is converted, never displayed.
+    expect(formatLength(2500)).toBe("8.2'");
   });
 
   it('parses every notation the inspector accepts', () => {
     expect(parseLength('12\'6"', 'ft')).toBeCloseTo(304.8 * 12 + 25.4 * 6, 6);
     expect(parseLength('3.5m', 'ft')).toBeCloseTo(3500, 6);
     expect(parseLength('450mm', 'ft')).toBeCloseTo(450, 6);
-    expect(parseLength('10', 'm')).toBeCloseTo(10000, 6);
-    // A bare number is read in the project's unit, not assumed metric.
-    expect(parseLength('10', 'ft')).toBeCloseTo(3048, 6);
-    expect(parseLength('nonsense', 'ft')).toBeNull();
+    // A bare number is always feet now.
+    expect(parseLength('10')).toBeCloseTo(3048, 6);
+    expect(parseLength('12.5')).toBeCloseTo(3810, 6);
+    expect(parseLength('18in')).toBeCloseTo(457.2, 6);
+    expect(parseLength('nonsense')).toBeNull();
   });
 
-  it('reports area in the right family', () => {
-    expect(formatArea(304.8 * 304.8, 'ft')).toBe('1 ft²');
-    expect(formatArea(1_000_000, 'm')).toBe('1 m²');
+  it('reports area in square feet', () => {
+    expect(formatArea(304.8 * 304.8)).toBe('1 ft²');
+    expect(formatArea(304.8 * 304.8 * 120)).toBe('120 ft²');
+  });
+
+  it('parses an area typed in square feet', () => {
+    expect(parseArea('120')).toBeCloseTo(120 * 304.8 * 304.8, 3);
+    expect(parseArea('120 sq ft')).toBeCloseTo(120 * 304.8 * 304.8, 3);
+    expect(parseArea('0')).toBeNull();
+    expect(parseArea('abc')).toBeNull();
   });
 
   it('never picks a grid step that would crowd the screen', () => {
     const pxPerMM = 0.01;
-    const step = niceGridStep('m', 8, pxPerMM);
+    const step = niceGridStep('ft', 8, pxPerMM);
     expect(step * pxPerMM).toBeGreaterThanOrEqual(8);
   });
 });
@@ -363,20 +387,26 @@ describe('snapping', () => {
 
 describe('project creation', () => {
   it('sizes exterior walls so the inner face matches the requested footprint', () => {
-    const p = createProject({ name: 'X', width: 10, height: 8, unit: 'm', outerWalls: true });
+    // Dimensions are feet, always.
+    const p = createProject({ name: 'X', width: 30, height: 20, unit: 'ft', outerWalls: true });
     const rooms = Object.values(p.entities).filter((e) => e.type === 'room');
     expect(rooms).toHaveLength(1);
     if (rooms[0].type === 'room') {
       // The detected room follows the wall centrelines, so it is one wall
       // thickness larger than the clear inside dimension in each direction.
+      const t = p.wallDefaults.exteriorThickness;
       const area = polygonArea(rooms[0].polygon);
-      expect(area).toBeCloseTo(10200 * 8200, -5);
+      expect(area).toBeCloseTo((mmOfFeet(30) + t) * (mmOfFeet(20) + t), -5);
     }
   });
 
-  it('creates an empty plan when outer walls are declined', () => {
-    const p = createProject({ name: 'X', width: 10, height: 8, unit: 'm', outerWalls: false });
-    expect(p.order).toHaveLength(0);
+  it('always creates a plot, even with no walls', () => {
+    const p = createProject({ name: 'X', width: 30, height: 20, unit: 'ft', outerWalls: false });
+    // The plot is the one thing every plan has: it is what everything snaps to.
+    expect(p.order).toHaveLength(1);
+    const plot = findPlot(p);
+    expect(plot).not.toBeNull();
+    expect(feetOf(plot!.width)).toBeCloseTo(30 + feetOf(p.wallDefaults.exteriorThickness), 6);
     expect(p.layers.length).toBeGreaterThan(0);
   });
 });
@@ -433,5 +463,92 @@ describe('drawing scale', () => {
     expect(scaleDenominator(0)).toBe(1);
     expect(scaleDenominator(-1)).toBe(1);
     expect(scaleDenominator(Number.NaN)).toBe(1);
+  });
+});
+
+/* -------------------------------------------------------------- room box */
+
+describe('room boxes', () => {
+  const base = () => createProject({ name: 'T', width: 40, height: 30, unit: 'ft', outerWalls: false });
+
+  it('builds a room whose clear size is exactly what was asked for', () => {
+    const p = base();
+    const rect = { x: 0, y: 0, w: mmOfFeet(12), h: mmOfFeet(10) };
+    const { room, walls } = buildRoomBox(p, {
+      rect,
+      wallThickness: 100,
+      wallHeight: 2743,
+    });
+    expect(walls).toHaveLength(4);
+    expect(room.wallIds).toHaveLength(4);
+    const r = roomRect(room)!;
+    expect(r.w).toBeCloseTo(rect.w, 6);
+    expect(r.h).toBeCloseTo(rect.h, 6);
+    expect(sqftOf(polygonArea(room.polygon))).toBeCloseTo(120, 6);
+  });
+
+  it('resizes a room and moves its walls with it', () => {
+    let p = base();
+    const { room, walls } = buildRoomBox(p, {
+      rect: { x: 0, y: 0, w: mmOfFeet(12), h: mmOfFeet(10) },
+      wallThickness: 100,
+      wallHeight: 2743,
+    });
+    for (const e of [...walls, room]) {
+      p.entities[e.id] = e;
+      p.order.push(e.id);
+    }
+
+    p = resizeRoomBox(p, room.id, { w: mmOfFeet(20) });
+    const r = roomRect(p.entities[room.id] as never)!;
+    expect(feetOf(r.w)).toBeCloseTo(20, 6);
+    // The top-left corner is the anchor, so the room grew rightwards.
+    expect(r.x).toBeCloseTo(0, 6);
+
+    // The east wall must have followed the new width.
+    const east = p.entities[room.wallIds![1]];
+    expect(east.type).toBe('wall');
+    if (east.type === 'wall') expect(feetOf(east.a.x)).toBeCloseTo(20 + 50 / 304.8, 3);
+  });
+
+  it('resizes to a target area while holding proportions', () => {
+    let p = base();
+    const { room, walls } = buildRoomBox(p, {
+      rect: { x: 0, y: 0, w: mmOfFeet(12), h: mmOfFeet(10) },
+      wallThickness: 100,
+      wallHeight: 2743,
+    });
+    for (const e of [...walls, room]) {
+      p.entities[e.id] = e;
+      p.order.push(e.id);
+    }
+
+    p = setRoomArea(p, room.id, mm2OfSqft(240));
+    const r = roomRect(p.entities[room.id] as never)!;
+    expect(sqftOf(r.w * r.h)).toBeCloseTo(240, 3);
+    // Doubling the area keeps the 12:10 proportion.
+    expect(r.w / r.h).toBeCloseTo(1.2, 6);
+  });
+
+  it('keeps rooms inside the plot', () => {
+    const p = createProject({ name: 'T', width: 40, height: 30, unit: 'ft', outerWalls: true });
+    const plot = findPlot(p)!;
+    expect(plot).toBeTruthy();
+    const outside = { x: plot.x + plot.width - 500, y: plot.y, w: mmOfFeet(20), h: mmOfFeet(10) };
+    const clamped = clampRectToPlot(outside, plot);
+    expect(clamped.x + clamped.w).toBeLessThanOrEqual(plot.x + plot.width + 1e-6);
+    expect(clamped.w).toBeCloseTo(outside.w, 6); // slid in, not shrunk
+  });
+
+  it('recognises only true rectangles', () => {
+    const p = base();
+    const { room } = buildRoomBox(p, {
+      rect: { x: 0, y: 0, w: 1000, h: 1000 },
+      wallThickness: 100,
+      wallHeight: 2743,
+    });
+    expect(roomRect(room)).not.toBeNull();
+    const L = { ...room, polygon: [...room.polygon, { x: 500, y: 1500 }] };
+    expect(roomRect(L)).toBeNull();
   });
 });

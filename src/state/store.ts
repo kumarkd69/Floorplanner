@@ -50,7 +50,8 @@ const DEFAULT_UI: UIState = {
   largeCursor: false,
   snap: DEFAULT_SNAP,
   activeCatalogId: null,
-  sidebarTab: 'library',
+  activePresetId: null,
+  sidebarTab: 'rooms',
   sidebarOpen: true,
   propertiesOpen: true,
 };
@@ -193,8 +194,23 @@ export class Store {
     this.set({ ui: { ...this.state.ui, ...patch } });
   }
 
+  /**
+   * Switch tools.
+   *
+   * Tools are strictly exclusive: leaving a tool disarms whatever it had armed
+   * and notifies listeners so any half-finished drawing on the canvas is
+   * abandoned. Without this, picking the wall tool and then another tool left
+   * the wall rubber-banding behind the new tool.
+   */
   setTool(tool: UIState['tool']) {
-    this.setUI({ tool, selection: tool === 'select' ? this.state.ui.selection : [] });
+    if (this.state.ui.tool === tool) return;
+    this.setUI({
+      tool,
+      selection: tool === 'select' ? this.state.ui.selection : [],
+      // Only the furniture tool keeps something armed, and only its own kind.
+      activeCatalogId: tool === 'furniture' ? this.state.ui.activeCatalogId : null,
+      activePresetId: tool === 'furniture' ? this.state.ui.activePresetId : null,
+    });
   }
 
   setSelection(ids: ID[]) {

@@ -10,6 +10,7 @@ import {
   type ScheduleRow,
 } from '@/export';
 import { FurnitureLibrary } from './FurnitureLibrary';
+import { RoomLibrary } from './RoomLibrary';
 import { Button, IconButton, Segmented } from './ui';
 import {
   IconChevronDown,
@@ -19,13 +20,15 @@ import {
   IconEyeOff,
   IconLayers,
   IconLock,
+  IconRoom,
   IconSofa,
   IconTable,
   IconUnlock,
 } from './Icons';
 
 const TABS: Array<{ id: UIState['sidebarTab']; label: string; Icon: React.ComponentType<{ size?: number }> }> = [
-  { id: 'library', label: 'Library', Icon: IconSofa },
+  { id: 'rooms', label: 'Rooms', Icon: IconRoom },
+  { id: 'library', label: 'Furniture', Icon: IconSofa },
   { id: 'layers', label: 'Layers', Icon: IconLayers },
   { id: 'schedule', label: 'Schedules', Icon: IconTable },
   { id: 'history', label: 'History', Icon: IconLayers },
@@ -50,6 +53,7 @@ export function Sidebar() {
         ))}
       </div>
       <div className="panel__body" role="tabpanel">
+        {tab === 'rooms' && <RoomLibrary />}
         {tab === 'library' && <FurnitureLibrary />}
         {tab === 'layers' && <Layers />}
         {tab === 'schedule' && <Schedules />}

@@ -2,6 +2,7 @@ import type { Layer, LayerKind, Project, Unit, Wall } from '@/types';
 import { uid } from '@/core/id';
 import { toMM } from '@/core/units';
 import { syncAutoRooms } from '@/core/rooms';
+import type { Plot } from '@/types';
 
 const LAYER_DEFS: Array<{ kind: LayerKind; name: string; color: string }> = [
   { kind: 'rooms', name: 'Rooms', color: '#94a3b8' },
@@ -88,6 +89,22 @@ export function createProject(opts: NewProjectOptions): Project {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+
+  // The plot is the site everything snaps to and is kept inside.
+  const plot: Plot = {
+    id: uid('plot'),
+    type: 'plot',
+    layerId: layers.find((l) => l.kind === 'rooms')!.id,
+    x: -half,
+    y: -half,
+    width: w + thickness,
+    height: h + thickness,
+    name: 'Plot',
+    locked: false,
+    hidden: false,
+  };
+  project.entities[plot.id] = plot;
+  project.order.push(plot.id);
 
   if (opts.outerWalls && w > 0 && h > 0) {
     // Centrelines sit half a thickness outside the requested inner rectangle.

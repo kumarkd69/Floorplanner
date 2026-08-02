@@ -295,8 +295,18 @@ export function syncAutoRooms(project: Project): Project {
   const matched = new Set<string>();
   const keep = new Set<string>();
 
+  // Enclosures already claimed by a hand-drawn room box are left alone —
+  // otherwise every room drawn with the room tool would immediately gain a
+  // duplicate auto room sitting exactly on top of it.
+  const manual: Room[] = [];
+  for (const id of project.order) {
+    const e = entities[id];
+    if (e && e.type === 'room' && !e.auto) manual.push(e);
+  }
+
   for (const poly of enclosures) {
     const c = centroid(poly);
+    if (manual.some((m) => pointInPolygon(c, m.polygon))) continue;
     const area = polygonArea(poly);
     // Tolerance scales with room size so dragging a wall still re-matches.
     const tol = Math.sqrt(area) * 0.75 + 500;

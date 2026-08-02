@@ -259,3 +259,17 @@ export const IconLogo = svg(
     <path d="M2.5 12h8V3.5M10.5 12v8.5M21.5 12h-4M14.5 3.5v5" />
   </>,
 );
+
+export const IconLink = svg(
+  <>
+    <path d="M10 13a5 5 0 007.5.5l2-2a5 5 0 00-7-7l-1 1" />
+    <path d="M14 11a5 5 0 00-7.5-.5l-2 2a5 5 0 007 7l1-1" />
+  </>,
+);
+
+export const IconPlot = svg(
+  <>
+    <path d="M3 3h18v18H3z" strokeDasharray="3 2.5" />
+    <path d="M3 3h4M3 3v4M21 3h-4M21 3v4M3 21h4M3 21v-4M21 21h-4M21 21v-4" strokeDasharray="0" />
+  </>,
+);

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   Dimension,
   Door,
+  Plot,
+  Room,
   Entity,
   Furniture,
   ID,
@@ -20,6 +22,7 @@ import {
   rectCenter,
   rectFromCorners,
   sub,
+  type Rect,
 } from '@/core/geometry';
 import {
   clampOpeningT,
@@ -34,8 +37,14 @@ import {
 import { pickEntity, pickInRect } from '@/core/pick';
 import { alignmentSnap, snapPoint } from '@/core/snapping';
 import { moveWallEndpoint, splitWall } from '@/core/wallOps';
-import { makeRoom } from '@/core/rooms';
-import { formatAngle, formatLength } from '@/core/units';
+import {
+  buildRoomBox,
+  clampPointToPlot,
+  clampRectToPlot,
+  findPlot,
+} from '@/core/roomBox';
+import { PRESET_BY_ID, presetSizeMM } from '@/data/roomPresets';
+import { formatArea, formatAngle, formatLength } from '@/core/units';
 import { uid } from '@/core/id';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { layerIdFor } from '@/state/project';
@@ -61,7 +70,7 @@ type Interaction =
   | { kind: 'rotate'; pivot: Vec2; startAngle: number; origins: Map<ID, Entity> }
   | { kind: 'wall-endpoint'; wallId: ID; which: 'a' | 'b' }
   | { kind: 'draw-wall'; points: Vec2[]; bulge: number }
-  | { kind: 'draw-room'; points: Vec2[] }
+  | { kind: 'draw-rect'; target: 'room' | 'plot'; start: Vec2; current: Vec2 }
   | { kind: 'draw-dimension'; points: Vec2[]; final: number }
   | { kind: 'measure'; points: Vec2[] }
   | { kind: 'opening-drag'; id: ID };
@@ -72,13 +81,21 @@ export interface ContextMenuState {
   targetId: ID | null;
 }
 
+export interface Readout {
+  world: Vec2 | null;
+  hint: string | null;
+}
+
+export interface InteractionCallbacks {
+  /** Status-bar readout — fires on every pointer move. */
+  onReadout: (r: Readout) => void;
+  /** Context menu open/close. */
+  onContextMenu: (state: ContextMenuState | null) => void;
+}
+
 export interface InteractionApi {
   overlay: Overlay;
   cursor: string;
-  contextMenu: ContextMenuState | null;
-  closeContextMenu: () => void;
-  /** Status-bar readout: cursor position and any live measurement. */
-  readout: { world: Vec2 | null; hint: string | null };
   onPointerDown: (ev: React.PointerEvent) => void;
   onPointerMove: (ev: React.PointerEvent) => void;
   onPointerUp: (ev: React.PointerEvent) => void;
@@ -89,7 +106,19 @@ export interface InteractionApi {
   dropFurniture: (catalogId: string, screen: Vec2) => void;
 }
 
-export function useCanvasInteraction(canvas: HTMLCanvasElement | null): InteractionApi {
+/**
+ * Canvas pointer interaction.
+ *
+ * Only `overlay` and `cursor` live in React state here — both are consumed by
+ * the canvas itself. The status readout and the context menu are pushed out
+ * through stable callbacks instead of being returned, because they change on
+ * every mouse move: returning them would give this hook a new identity per
+ * frame, and anything memoising on it would re-render continuously.
+ */
+export function useCanvasInteraction(
+  canvas: HTMLCanvasElement | null,
+  callbacks: InteractionCallbacks,
+): InteractionApi {
   const interaction = useRef<Interaction>({ kind: 'none' });
   /**
    * The document as it stood when the current gesture began.
@@ -104,11 +133,13 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
   const spaceDown = useRef(false);
   const [overlay, setOverlay] = useState<Overlay>({});
   const [cursor, setCursor] = useState('default');
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [readout, setReadout] = useState<{ world: Vec2 | null; hint: string | null }>({
-    world: null,
-    hint: null,
-  });
+  // Held in a ref so the pointer handlers never need them as dependencies.
+  const cb = useRef(callbacks);
+  cb.current = callbacks;
+  const setContextMenu = useCallback((state: ContextMenuState | null) => {
+    cb.current.onContextMenu(state);
+  }, []);
+  const setReadout = useCallback((r: Readout) => cb.current.onReadout(r), []);
 
   /* ------------------------------------------------------------ helpers */
 
@@ -169,6 +200,29 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
     setOverlay({});
     setContextMenu(null);
   }, []);
+
+  /**
+   * Tools are mutually exclusive.
+   *
+   * Switching away from a tool abandons whatever it had in flight — a wall
+   * mid-chain, a rectangle mid-drag — so the previous tool stops drawing the
+   * moment another is picked, rather than rubber-banding under the new one.
+   */
+  const toolRef = useRef(store.getState().ui.tool);
+  useEffect(
+    () =>
+      store.subscribe(() => {
+        const tool = store.getState().ui.tool;
+        if (tool === toolRef.current) return;
+        toolRef.current = tool;
+        interaction.current = { kind: 'none' };
+        gestureStart.current = null;
+        setOverlay({});
+        setReadout({ world: null, hint: null });
+        setCursor(tool === 'select' ? 'default' : tool === 'pan' ? 'grab' : 'crosshair');
+      }),
+    [],
+  );
 
   /* ---------------------------------------------------------- placement */
 
@@ -298,21 +352,12 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
           }
           return;
         }
-        case 'room': {
-          const cur = interaction.current;
+        case 'room':
+        case 'plot': {
+          // Rectangle drag, exactly like drawing a rectangle in Figma.
           const snapped = snapPoint(world, snapCtx());
-          if (cur.kind === 'draw-room') {
-            // Closing the loop by clicking the first point finishes the room.
-            if (cur.points.length >= 3 && dist(snapped.point, cur.points[0]) < worldTol(12)) {
-              commitRoom(cur.points);
-              interaction.current = { kind: 'none' };
-              setOverlay({});
-              return;
-            }
-            interaction.current = { kind: 'draw-room', points: [...cur.points, snapped.point] };
-          } else {
-            interaction.current = { kind: 'draw-room', points: [snapped.point] };
-          }
+          const start = tool === 'room' ? clampPointToPlot(snapped.point, findPlot(s.project)) : snapped.point;
+          interaction.current = { kind: 'draw-rect', target: tool, start, current: start };
           return;
         }
         case 'door':
@@ -321,7 +366,8 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
           return;
         }
         case 'furniture': {
-          if (s.ui.activeCatalogId) placeFurnitureAt(s.ui.activeCatalogId, world);
+          if (s.ui.activePresetId) placeRoomPreset(s.ui.activePresetId, world);
+          else if (s.ui.activeCatalogId) placeFurnitureAt(s.ui.activeCatalogId, world);
           return;
         }
         case 'dimension':
@@ -454,7 +500,7 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
       const screen = toScreen(ev);
       const world = screenToWorld(screen, s.viewport);
       const cur = interaction.current;
-      setReadout((r) => ({ ...r, world }));
+      setReadout({ world, hint: null });
 
       switch (cur.kind) {
         case 'pan': {
@@ -668,11 +714,33 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
           return;
         }
 
-        case 'draw-room': {
-          const snapped = snapPoint(world, snapCtx(undefined, cur.points[cur.points.length - 1]));
+        case 'draw-rect': {
+          const snapped = snapPoint(world, snapCtx(undefined, cur.start));
+          const raw = cur.target === 'room'
+            ? clampPointToPlot(snapped.point, findPlot(s.project))
+            : snapped.point;
+          // Shift constrains to a square, as it does in Figma.
+          const end = ev.shiftKey ? squareFrom(cur.start, raw) : raw;
+          interaction.current = { ...cur, current: end };
+
+          const rect = rectFromCorners(cur.start, end);
           setOverlay({
             snap: snapped,
-            draft: { kind: 'room', points: [...cur.points, snapped.point] },
+            draft: { kind: 'room', points: polygonOf(rect) },
+            callouts: [
+              {
+                at: end,
+                text: `${formatLength(rect.w, undefined, { compact: true })} × ${formatLength(
+                  rect.h,
+                  undefined,
+                  { compact: true },
+                )}   ${formatArea(rect.w * rect.h)}`,
+              },
+            ],
+          });
+          setReadout({
+            world,
+            hint: `${formatLength(rect.w)} × ${formatLength(rect.h)} · ${formatArea(rect.w * rect.h)}`,
           });
           return;
         }
@@ -715,6 +783,31 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
         setOverlay({ hostWallId: wall?.id ?? null });
         setCursor(wall ? 'copy' : 'not-allowed');
         return;
+      }
+
+      if (s.ui.tool === 'room' || s.ui.tool === 'plot') {
+        setOverlay({ snap: snapPoint(world, snapCtx()) });
+        setCursor('crosshair');
+        return;
+      }
+
+      if (s.ui.tool === 'furniture' && s.ui.activePresetId) {
+        const preset = PRESET_BY_ID.get(s.ui.activePresetId);
+        if (preset) {
+          const size = presetSizeMM(preset);
+          const snapped = snapPoint(world, snapCtx());
+          const rect = clampRectToPlot(
+            { x: snapped.point.x, y: snapped.point.y, w: size.w, h: size.h },
+            findPlot(s.project),
+          );
+          setOverlay({
+            snap: snapped,
+            draft: { kind: 'room', points: polygonOf(rect) },
+            callouts: [{ at: snapped.point, text: `${preset.name}  ${preset.wFt}' × ${preset.hFt}'` }],
+          });
+          setCursor('copy');
+          return;
+        }
       }
 
       if (s.ui.tool === 'furniture' && s.ui.activeCatalogId) {
@@ -808,6 +901,18 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
           setOverlay({});
           return;
 
+        case 'draw-rect': {
+          const rect = rectFromCorners(cur.start, cur.current);
+          // Ignore an accidental click that produced no area.
+          if (rect.w > 200 && rect.h > 200) {
+            if (cur.target === 'plot') commitPlot(rect);
+            else commitRoomRect(rect);
+          }
+          interaction.current = { kind: 'none' };
+          setOverlay({});
+          return;
+        }
+
         default:
           return;
       }
@@ -829,8 +934,7 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
         setOverlay({});
         return;
       }
-      if (cur.kind === 'draw-room') {
-        if (cur.points.length >= 3) commitRoom(cur.points);
+      if (cur.kind === 'draw-rect') {
         interaction.current = { kind: 'none' };
         setOverlay({});
         return;
@@ -896,15 +1000,59 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
     store.addEntities('Draw wall', [wall], { weld: [wall.id], reflowRooms: true });
   }
 
-  function commitRoom(points: Vec2[]) {
-    if (points.length < 3) return;
+  /** A drawn rectangle becomes a room plus the four walls enclosing it. */
+  function commitRoomRect(rect: Rect, preset?: { name: string; roomType: Room['roomType'] }) {
     const s = store.getState();
-    const names = Object.values(s.project.entities)
-      .filter((e): e is Extract<Entity, { type: 'room' }> => e.type === 'room')
-      .map((r) => r.name);
-    const room = makeRoom(points, layerIdFor(s.project, 'rooms'), names, false);
-    store.addEntities('Draw room', [room]);
+    const clamped = clampRectToPlot(rect, findPlot(s.project));
+    const { room, walls } = buildRoomBox(s.project, {
+      rect: clamped,
+      name: preset?.name,
+      roomType: preset?.roomType,
+      wallThickness: s.project.wallDefaults.interiorThickness,
+      wallHeight: s.project.wallDefaults.height,
+    });
+    store.addEntities(preset ? `Add ${preset.name}` : 'Draw room', [...walls, room], {
+      weld: walls.map((w) => w.id),
+      reflowRooms: true,
+    });
     store.setSelection([room.id]);
+    store.setTool('select');
+  }
+
+  /** The plot is unique — drawing a new one replaces the old. */
+  function commitPlot(rect: Rect) {
+    const s = store.getState();
+    const existing = findPlot(s.project);
+    const plot: Plot = {
+      id: existing?.id ?? uid('plot'),
+      type: 'plot',
+      layerId: layerIdFor(s.project, 'rooms'),
+      x: rect.x,
+      y: rect.y,
+      width: rect.w,
+      height: rect.h,
+      name: 'Plot',
+      locked: false,
+      hidden: false,
+    };
+    if (existing) {
+      store.updateEntity('Resize plot', plot.id, plot);
+    } else {
+      store.addEntities('Draw plot', [plot]);
+    }
+    store.setSelection([plot.id]);
+    store.setTool('select');
+  }
+
+  function placeRoomPreset(presetId: string, world: Vec2) {
+    const preset = PRESET_BY_ID.get(presetId);
+    if (!preset) return;
+    const size = presetSizeMM(preset);
+    const snapped = snapPoint(world, snapCtx());
+    commitRoomRect(
+      { x: snapped.point.x, y: snapped.point.y, w: size.w, h: size.h },
+      { name: preset.name, roomType: preset.roomType },
+    );
   }
 
   function commitDimension(points: Vec2[]) {
@@ -940,17 +1088,10 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
     return () => window.removeEventListener('keydown', onKey);
   }, [cancel]);
 
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
-
-  // Memoised: `CanvasView` publishes this object to its parent from a layout
-  // effect, so a fresh identity on every render would loop set-state forever.
   return useMemo(
     () => ({
       overlay,
       cursor,
-      contextMenu,
-      closeContextMenu,
-      readout,
       onPointerDown,
       onPointerMove,
       onPointerUp,
@@ -959,36 +1100,56 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
       cancel,
       dropFurniture,
     }),
-    [
-      overlay,
-      cursor,
-      contextMenu,
-      closeContextMenu,
-      readout,
-      onPointerDown,
-      onPointerMove,
-      onPointerUp,
-      onDoubleClick,
-      onContextMenu,
-      cancel,
-      dropFurniture,
-    ],
+    [overlay, cursor, onPointerDown, onPointerMove, onPointerUp, onDoubleClick, onContextMenu, cancel, dropFurniture],
   );
 }
 
 /* --------------------------------------------------------------- helpers */
+
+/** Corner-to-corner rectangle as a clockwise polygon. */
+function polygonOf(r: Rect): Vec2[] {
+  return [
+    { x: r.x, y: r.y },
+    { x: r.x + r.w, y: r.y },
+    { x: r.x + r.w, y: r.y + r.h },
+    { x: r.x, y: r.y + r.h },
+  ];
+}
+
+/** Nearest square corner to `to`, for shift-constrained rectangle drags. */
+function squareFrom(from: Vec2, to: Vec2): Vec2 {
+  const side = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y));
+  return {
+    x: from.x + Math.sign(to.x - from.x || 1) * side,
+    y: from.y + Math.sign(to.y - from.y || 1) * side,
+  };
+}
 
 function isTypingTarget(t: EventTarget | null): boolean {
   if (!(t instanceof HTMLElement)) return false;
   return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.tagName === 'SELECT';
 }
 
+/**
+ * Snapshot the entities a gesture will transform.
+ *
+ * Selecting a room implicitly includes the four walls it was drawn with, so
+ * dragging or resizing a room takes its enclosure along instead of leaving the
+ * walls stranded behind it.
+ */
 function snapshot(ids: ID[]): Map<ID, Entity> {
   const p = store.getState().project;
   const m = new Map<ID, Entity>();
   for (const id of ids) {
     const e = p.entities[id];
-    if (e) m.set(id, e);
+    if (!e) continue;
+    m.set(id, e);
+    if (e.type === 'room' && e.wallIds) {
+      for (const wid of e.wallIds) {
+        const w = p.entities[wid];
+        if (w) m.set(wid, w);
+      }
+    }
   }
   return m;
 }

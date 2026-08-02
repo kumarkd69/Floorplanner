@@ -33,10 +33,17 @@ export function transformEntity(e: Entity, map: PointMap, rotationDelta = 0, sca
       return { ...e, points: e.points.map(map) };
     case 'text':
       return { ...e, position: map(e.position), rotation: e.rotation + rotationDelta };
+    case 'plot':
+      // A plot is axis-aligned by definition: it translates but never rotates.
+      return { ...e, ...mapRectOrigin(e, map), width: e.width * scale, height: e.height * scale };
     case 'door':
     case 'window':
       return e;
   }
+}
+
+function mapRectOrigin(e: { x: number; y: number }, map: PointMap): { x: number; y: number } {
+  return map({ x: e.x, y: e.y });
 }
 
 export function translateEntity(e: Entity, delta: Vec2): Entity {

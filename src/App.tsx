@@ -4,6 +4,7 @@ import { store, useStoreState } from '@/hooks/useStore';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { exportJSON, exportPDF, exportPNG, parseProjectFile, DEFAULT_EXPORT } from '@/export';
 import { CanvasView, type CanvasHandle } from '@/components/CanvasView';
+import type { ContextMenuState, Readout } from '@/hooks/useCanvasInteraction';
 import { Toolbar } from '@/components/Toolbar';
 import { Sidebar } from '@/components/Sidebar';
 import { PropertiesPanel } from '@/components/PropertiesPanel';
@@ -23,6 +24,10 @@ type DialogId = 'new' | 'export' | 'settings' | 'help' | null;
 export default function App() {
   const [handle, setHandle] = useState<CanvasHandle | null>(null);
   const [dialog, setDialog] = useState<DialogId>(null);
+  // Transient canvas state lives here rather than inside the canvas handle, so
+  // a mouse move never invalidates anything memoised on the handle.
+  const [readout, setReadout] = useState<Readout>({ world: null, hint: null });
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const ui = useStoreState((s) => s.ui);
@@ -143,7 +148,7 @@ export default function App() {
         {ui.sidebarOpen && <Sidebar />}
 
         <main className="app__center">
-          <CanvasView onReady={setHandle} />
+          <CanvasView onReady={setHandle} onReadout={setReadout} onContextMenu={setContextMenu} />
 
           {handle && (
             <FloatingControls
@@ -158,15 +163,15 @@ export default function App() {
 
           {hint && <div className="hint">{hint}</div>}
 
-          {handle?.api.contextMenu && (
-            <ContextMenu state={handle.api.contextMenu} onClose={handle.api.closeContextMenu} />
+          {contextMenu && (
+            <ContextMenu state={contextMenu} onClose={() => setContextMenu(null)} />
           )}
         </main>
 
         {ui.propertiesOpen && <PropertiesPanel />}
       </div>
 
-      <StatusBar readout={handle?.api.readout ?? { world: null, hint: null }} />
+      <StatusBar readout={readout} />
 
       <input
         ref={fileInput}
@@ -199,14 +204,16 @@ function toolHint(tool: string): string | null {
       return 'Click to start a wall, keep clicking to chain segments. Double-click or Esc to finish.';
     case 'wall-curved':
       return 'Click two points to draw a curved wall. Adjust the curvature in the inspector.';
+    case 'plot':
+      return 'Drag a rectangle to set the plot. Everything you draw snaps inside it.';
     case 'room':
-      return 'Click each corner. Click the first point again — or double-click — to close the room.';
+      return 'Drag a rectangle, just like in Figma. Walls and dimensions are added automatically. Hold ⇧ for a square.';
     case 'door':
       return 'Click on a wall to drop a door. It snaps to the wall and cannot overlap other openings.';
     case 'window':
       return 'Click on a wall to place a window.';
     case 'furniture':
-      return 'Pick an item from the library, then click to place it. You can also drag items onto the plan.';
+      return 'Pick a room or furniture item from the left, then click to place it.';
     case 'dimension':
       return 'Click the start and end of the run you want to dimension.';
     case 'measure':

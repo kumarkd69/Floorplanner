@@ -198,6 +198,8 @@ export function entityBounds(entity: Entity, project: Project): Rect {
       const w = entity.text.length * entity.size * 0.6;
       return { x: entity.position.x, y: entity.position.y - entity.size, w, h: entity.size * 1.4 };
     }
+    case 'plot':
+      return { x: entity.x, y: entity.y, w: entity.width, h: entity.height };
   }
 }
 
@@ -286,6 +288,14 @@ export function hitTestEntity(
     case 'text': {
       const b = entityBounds(entity, project);
       return p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol;
+    }
+    case 'plot': {
+      // Only the boundary itself is clickable — the interior must stay
+      // available for selecting whatever is drawn on the plot.
+      const b = entityBounds(entity, project);
+      const inOuter = p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol;
+      const inInner = p.x > b.x + tol && p.x < b.x + b.w - tol && p.y > b.y + tol && p.y < b.y + b.h - tol;
+      return inOuter && !inInner;
     }
   }
 }

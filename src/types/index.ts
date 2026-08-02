@@ -108,6 +108,12 @@ export interface Room {
   locked: boolean;
   hidden: boolean;
   groupId?: ID;
+  /**
+   * Walls this room created when it was drawn as a rectangle. Resizing the room
+   * numerically rewrites exactly these, so the enclosure follows the number the
+   * user typed.
+   */
+  wallIds?: ID[];
 }
 
 /* ------------------------------------------------------- doors & windows */
@@ -230,6 +236,30 @@ export interface Dimension {
   groupId?: ID;
 }
 
+/* ------------------------------------------------------------------- plot */
+
+/**
+ * The plot (site) boundary.
+ *
+ * A plan has at most one. It is the outermost rectangle everything else snaps
+ * to and is clamped inside, so a drawing can never wander off the site.
+ */
+export interface Plot {
+  id: ID;
+  type: 'plot';
+  layerId: ID;
+  /** Top-left corner and size, in mm. Always axis-aligned. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name: string;
+  locked: boolean;
+  hidden: boolean;
+  groupId?: ID;
+  notes?: string;
+}
+
 /* ------------------------------------------------------------ annotations */
 
 export interface TextNote {
@@ -254,7 +284,8 @@ export type Entity =
   | WindowOpening
   | Furniture
   | Dimension
-  | TextNote;
+  | TextNote
+  | Plot;
 
 export type EntityType = Entity['type'];
 
@@ -314,6 +345,7 @@ export interface Viewport {
 export type ToolId =
   | 'select'
   | 'pan'
+  | 'plot'
   | 'wall'
   | 'wall-curved'
   | 'room'
@@ -383,7 +415,9 @@ export interface UIState {
   snap: SnapSettings;
   /** Catalog id armed for the furniture tool. */
   activeCatalogId: string | null;
-  sidebarTab: 'library' | 'layers' | 'schedule' | 'history';
+  /** Room preset armed for click-to-place. */
+  activePresetId: string | null;
+  sidebarTab: 'rooms' | 'library' | 'layers' | 'schedule' | 'history';
   sidebarOpen: boolean;
   propertiesOpen: boolean;
 }

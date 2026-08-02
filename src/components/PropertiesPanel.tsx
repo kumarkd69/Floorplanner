@@ -1,18 +1,28 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   Door,
   Dimension,
   Entity,
   Furniture,
+  Plot,
   Room,
   TextNote,
   Wall,
   WindowOpening,
 } from '@/types';
 import { store, useStoreState } from '@/hooks/useStore';
-import { formatArea, formatLength } from '@/core/units';
+import {
+  formatArea,
+  formatFeetValue,
+  formatLength,
+  mmOfFeet,
+  parseArea,
+  parseLength,
+  sqftOf,
+} from '@/core/units';
 import { roomMetrics, wallLength, wallPointAt } from '@/core/entities';
 import { roomColor } from '@/core/rooms';
+import { resizeRoomBox, roomRect, setRoomArea } from '@/core/roomBox';
 import { mergeWalls, offsetWall, splitWall } from '@/core/wallOps';
 import { MATERIAL_LABEL } from '@/render/theme';
 import {
@@ -48,6 +58,7 @@ import {
   IconSplit,
   IconTrash,
   IconUnlock,
+  IconLink,
 } from './Icons';
 
 export function PropertiesPanel() {
@@ -97,6 +108,8 @@ function labelFor(e: Entity): string {
       return 'Dimension';
     case 'text':
       return 'Annotation';
+    case 'plot':
+      return 'Plot';
   }
 }
 
@@ -398,6 +411,8 @@ function SingleInspector({ entity }: { entity: Entity }) {
       return <DimensionInspector dim={entity} />;
     case 'text':
       return <TextInspector note={entity} />;
+    case 'plot':
+      return <PlotInspector plot={entity} />;
   }
 }
 
@@ -523,13 +538,260 @@ function WallInspector({ wall }: { wall: Wall }) {
   );
 }
 
+/**
+ * The Layout block: width, height and total area for a rectangular object.
+ *
+ * All three are live and mutually consistent — typing a width rewrites the
+ * geometry, and typing an area rescales both edges while holding the
+ * proportions, which is how people actually brief a room ("about 120 sq ft").
+ */
+function LayoutSection({
+  w,
+  h,
+  onSize,
+  onArea,
+  locked,
+  note,
+}: {
+  w: number;
+  h: number;
+  onSize: (next: { w?: number; h?: number }) => void;
+  onArea?: (mm2: number) => void;
+  locked?: boolean;
+  note?: string;
+}) {
+  const [linked, setLinked] = useState(false);
+  const ratio = h > 0 ? w / h : 1;
+
+  return (
+    <div className="panel__section">
+      <h3 className="panel__title">Layout</h3>
+      <div className="layout-row">
+        <FeetInput
+          label="W"
+          valueMM={w}
+          disabled={locked}
+          onCommit={(mm) => onSize(linked ? { w: mm, h: mm / (ratio || 1) } : { w: mm })}
+        />
+        <button
+          type="button"
+          className={`linkbtn ${linked ? 'linkbtn--on' : ''}`}
+          aria-pressed={linked}
+          title={linked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+          onClick={() => setLinked((v) => !v)}
+        >
+          <IconLink size={14} />
+        </button>
+        <FeetInput
+          label="H"
+          valueMM={h}
+          disabled={locked}
+          onCommit={(mm) => onSize(linked ? { h: mm, w: mm * (ratio || 1) } : { h: mm })}
+        />
+      </div>
+
+      {onArea && (
+        <div className="layout-row" style={{ marginTop: 8 }}>
+          <AreaInput valueMM2={w * h} disabled={locked} onCommit={onArea} />
+        </div>
+      )}
+
+      {note && <p className="note" style={{ marginTop: 8 }}>{note}</p>}
+    </div>
+  );
+}
+
+/** A number field that reads and writes feet, with the unit inside the box. */
+function FeetInput({
+  label,
+  valueMM,
+  onCommit,
+  disabled,
+}: {
+  label: string;
+  valueMM: number;
+  onCommit: (mm: number) => void;
+  disabled?: boolean;
+}) {
+  const [draft, setDraft] = useState(() => formatFeetValue(valueMM));
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setDraft(formatFeetValue(valueMM));
+  }, [valueMM]);
+
+  const commit = () => {
+    const mm = parseLength(draft);
+    if (mm === null || mm <= 0) {
+      setDraft(formatFeetValue(valueMM));
+      return;
+    }
+    onCommit(mm);
+    setDraft(formatFeetValue(mm));
+  };
+
+  return (
+    <div className={`dimfield ${disabled ? 'dimfield--off' : ''}`}>
+      <span className="dimfield__label">{label}</span>
+      <input
+        className="dimfield__input"
+        value={draft}
+        disabled={disabled}
+        inputMode="decimal"
+        aria-label={`${label} in feet`}
+        onFocus={(e) => {
+          focused.current = true;
+          e.currentTarget.select();
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          focused.current = false;
+          commit();
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') {
+            commit();
+            (e.target as HTMLInputElement).blur();
+          } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            const base = Number(draft);
+            if (!Number.isFinite(base)) return;
+            const step = (e.shiftKey ? 1 : 0.5) * (e.key === 'ArrowUp' ? 1 : -1);
+            const next = Math.max(0.5, base + step);
+            setDraft(String(next));
+            onCommit(mmOfFeet(next));
+          }
+        }}
+      />
+      <span className="dimfield__unit">ft</span>
+    </div>
+  );
+}
+
+function AreaInput({
+  valueMM2,
+  onCommit,
+  disabled,
+}: {
+  valueMM2: number;
+  onCommit: (mm2: number) => void;
+  disabled?: boolean;
+}) {
+  const show = () => String(Math.round(sqftOf(valueMM2) * 10) / 10);
+  const [draft, setDraft] = useState(show);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setDraft(show());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueMM2]);
+
+  const commit = () => {
+    const mm2 = parseArea(draft);
+    if (mm2 === null) {
+      setDraft(show());
+      return;
+    }
+    onCommit(mm2);
+  };
+
+  return (
+    <div className={`dimfield dimfield--wide ${disabled ? 'dimfield--off' : ''}`}>
+      <span className="dimfield__label">Area</span>
+      <input
+        className="dimfield__input"
+        value={draft}
+        disabled={disabled}
+        inputMode="decimal"
+        aria-label="Total area in square feet"
+        onFocus={(e) => {
+          focused.current = true;
+          e.currentTarget.select();
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          focused.current = false;
+          commit();
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') {
+            commit();
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+      />
+      <span className="dimfield__unit">ft²</span>
+    </div>
+  );
+}
+
+function PlotInspector({ plot }: { plot: Plot }) {
+  const set = (patch: Partial<Plot>) =>
+    store.updateEntity<Plot>('Edit plot', plot.id, patch, { reflowRooms: true });
+
+  return (
+    <>
+      <LayoutSection
+        w={plot.width}
+        h={plot.height}
+        onSize={({ w, h }) => set({ width: w ?? plot.width, height: h ?? plot.height })}
+        onArea={(mm2) => {
+          const f = Math.sqrt(mm2 / (plot.width * plot.height));
+          set({ width: plot.width * f, height: plot.height * f });
+        }}
+        note="Everything you draw is snapped to the plot and kept inside it."
+      />
+      <div className="panel__section">
+        <Field label="Name">
+          <TextInput value={plot.name} onCommit={(name) => set({ name })} />
+        </Field>
+        <Field label="X">
+          <FeetInput label="X" valueMM={plot.x} onCommit={(x) => set({ x })} />
+        </Field>
+        <Field label="Y">
+          <FeetInput label="Y" valueMM={plot.y} onCommit={(y) => set({ y })} />
+        </Field>
+        <Stat label="Area" value={formatArea(plot.width * plot.height)} />
+      </div>
+    </>
+  );
+}
+
 function RoomInspector({ room }: { room: Room }) {
   const project = useStoreState((s) => s.project);
   const { area, perimeter } = roomMetrics(room);
   const set = (patch: Partial<Room>) => store.updateEntity<Room>('Edit room', room.id, patch);
+  const rect = roomRect(room);
 
   return (
     <>
+      {rect ? (
+        <LayoutSection
+          w={rect.w}
+          h={rect.h}
+          onSize={(next) =>
+            store.commit('Resize room', (p) => resizeRoomBox(p, room.id, next), {
+              reflowRooms: true,
+              weld: room.wallIds,
+            })
+          }
+          onArea={(mm2) =>
+            store.commit('Set room area', (p) => setRoomArea(p, room.id, mm2), {
+              reflowRooms: true,
+              weld: room.wallIds,
+            })
+          }
+        />
+      ) : (
+        <div className="panel__section">
+          <h3 className="panel__title">Layout</h3>
+          <p className="note">
+            This room is not a rectangle, so width and height cannot be typed. Drag its walls to
+            reshape it, or draw a new room with the Room tool.
+          </p>
+        </div>
+      )}
+
       <div className="panel__section">
         <Field label="Name">
           <TextInput value={room.name} onCommit={(name) => set({ name, renamed: true })} />

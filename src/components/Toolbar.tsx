@@ -14,6 +14,7 @@ import {
   IconHelp,
   IconLogo,
   IconMeasure,
+  IconPlot,
   IconPrint,
   IconRedo,
   IconRoom,
@@ -31,6 +32,7 @@ import {
 const TOOLS: Array<{ id: ToolId; label: string; key: string; Icon: React.ComponentType<{ size?: number }> }> = [
   { id: 'select', label: 'Select', key: 'V', Icon: IconCursor },
   { id: 'pan', label: 'Pan', key: 'H', Icon: IconHand },
+  { id: 'plot', label: 'Plot / floor', key: 'P', Icon: IconPlot },
   { id: 'wall', label: 'Wall', key: 'W', Icon: IconWall },
   { id: 'wall-curved', label: 'Curved wall', key: 'C', Icon: IconCurve },
   { id: 'room', label: 'Room', key: 'R', Icon: IconRoom },

@@ -11,6 +11,7 @@ const PICK_RANK: Record<Entity['type'], number> = {
   furniture: 4,
   wall: 3,
   room: 1,
+  plot: 0,
 };
 
 /**

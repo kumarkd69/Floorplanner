@@ -1,6 +1,7 @@
 import type {
   Door,
   Dimension,
+  Plot,
   Entity,
   Furniture,
   ID,
@@ -24,6 +25,7 @@ import {
   normalize,
   polygonLabelPoint,
   rectFromCorners,
+  rectFromPoints,
   rotate,
   sub,
   type Rect,
@@ -213,6 +215,13 @@ export function render(input: RenderInput): void {
 
   const order = paintOrder(project);
 
+  // The plot is the ground everything sits on.
+  for (const id of order) {
+    const e = project.entities[id];
+    if (!e || e.type !== 'plot' || !isEntityVisible(project, e)) continue;
+    drawPlot(ctx, e, theme, px, layerAlpha(project, e), ui);
+  }
+
   // Rooms first — they are the floor.
   for (const id of order) {
     const e = project.entities[id];
@@ -258,6 +267,9 @@ export function render(input: RenderInput): void {
       if (!e || e.type !== 'room' || !isEntityVisible(project, e)) continue;
       if (!intersects(entityBounds(e, project), view)) continue;
       drawRoomLabel(ctx, e, project, theme, px, layerAlpha(project, e));
+      if (ui.showDimensions) {
+        drawRoomDimensions(ctx, e, theme, px, layerAlpha(project, e), viewport.scale);
+      }
     }
   }
 
@@ -413,6 +425,134 @@ function drawRoomLabel(
   ctx.fillStyle = theme.roomSubLabel;
   ctx.font = `${nameSize * 0.8}px Inter, system-ui, sans-serif`;
   ctx.fillText(areaText, c.x, c.y + nameSize * 0.6);
+  ctx.restore();
+}
+
+/**
+ * The plot boundary: a hatched margin outside a clear interior, with its size
+ * called out on each edge. Drawn as a band rather than a fill so it reads as
+ * "site limit" without tinting everything inside it.
+ */
+function drawPlot(
+  ctx: CanvasRenderingContext2D,
+  plot: Plot,
+  theme: RenderTheme,
+  px: number,
+  alpha: number,
+  ui: UIState,
+) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = theme.dimension;
+  ctx.fillStyle = theme.dimension;
+  ctx.lineWidth = 2 * px;
+  ctx.setLineDash([14 * px, 8 * px]);
+  ctx.strokeRect(plot.x, plot.y, plot.width, plot.height);
+  ctx.setLineDash([]);
+
+  // Corner ticks, so the extents stay legible when zoomed out.
+  const t = Math.min(plot.width, plot.height) * 0.04;
+  ctx.lineWidth = 3 * px;
+  for (const [cx, cy, sx, sy] of [
+    [plot.x, plot.y, 1, 1],
+    [plot.x + plot.width, plot.y, -1, 1],
+    [plot.x + plot.width, plot.y + plot.height, -1, -1],
+    [plot.x, plot.y + plot.height, 1, -1],
+  ] as Array<[number, number, number, number]>) {
+    ctx.beginPath();
+    ctx.moveTo(cx + sx * t, cy);
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx, cy + sy * t);
+    ctx.stroke();
+  }
+
+  if (ui.showDimensions) {
+    const size = Math.min(Math.max(13 * px, 200), 500);
+    ctx.font = `700 ${size}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    edgeLabel(ctx, formatLength(plot.width), { x: plot.x + plot.width / 2, y: plot.y - size }, theme, px, size, 0);
+    edgeLabel(
+      ctx,
+      formatLength(plot.height),
+      { x: plot.x - size, y: plot.y + plot.height / 2 },
+      theme,
+      px,
+      size,
+      -Math.PI / 2,
+    );
+    ctx.fillStyle = theme.roomSubLabel;
+    ctx.font = `600 ${size * 0.85}px Inter, system-ui, sans-serif`;
+    ctx.fillText(
+      `${plot.name} · ${formatArea(plot.width * plot.height)}`,
+      plot.x + plot.width / 2,
+      plot.y + plot.height + size * 2.6,
+    );
+  }
+  ctx.restore();
+}
+
+/** A dimension caption on a plate, drawn upright at any rotation. */
+function edgeLabel(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  at: Vec2,
+  theme: RenderTheme,
+  px: number,
+  size: number,
+  angle: number,
+) {
+  ctx.save();
+  ctx.translate(at.x, at.y);
+  let a = angle;
+  if (a > Math.PI / 2 || a < -Math.PI / 2) a += Math.PI;
+  ctx.rotate(a);
+  const w = ctx.measureText(text).width;
+  ctx.fillStyle = theme.background;
+  ctx.globalAlpha = 0.88;
+  ctx.beginPath();
+  ctx.roundRect(-w / 2 - 5 * px, -size * 0.62, w + 10 * px, size * 1.24, 4 * px);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = theme.dimension;
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+/**
+ * Width and height called out on a room's own edges.
+ *
+ * Every room carries its dimensions on the drawing, so a reader never has to
+ * select something to find out how big it is.
+ */
+function drawRoomDimensions(
+  ctx: CanvasRenderingContext2D,
+  room: Room,
+  theme: RenderTheme,
+  px: number,
+  alpha: number,
+  scale: number,
+) {
+  const b = rectFromPoints(room.polygon);
+  // Skip when the room is too small on screen for the text to fit.
+  if (b.w * scale < 54 || b.h * scale < 34) return;
+  const size = Math.min(Math.max(10 * px, 110), 260);
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = `600 ${size}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  edgeLabel(ctx, formatLength(b.w, undefined, { compact: true }), { x: b.x + b.w / 2, y: b.y + size * 0.9 }, theme, px, size, 0);
+  edgeLabel(
+    ctx,
+    formatLength(b.h, undefined, { compact: true }),
+    { x: b.x + size * 0.9, y: b.y + b.h / 2 },
+    theme,
+    px,
+    size,
+    -Math.PI / 2,
+  );
   ctx.restore();
 }
 
@@ -979,7 +1119,66 @@ function label(
   ctx.restore();
 }
 
-/** Automatic length tags along every wall, toggled by "Dimensions". */
+/**
+ * Walls whose length is already reported by a room's width/height caption.
+ *
+ * Every room prints its own dimensions, so labelling the walls that form its
+ * boundary as well would stack two numbers for the same edge — which is what
+ * made the drawing unreadable. Computed per project revision, not per frame.
+ */
+const roomEdgeWallCache = new WeakMap<Project, Set<ID>>();
+
+function wallsCoveredByRooms(project: Project): Set<ID> {
+  const cached = roomEdgeWallCache.get(project);
+  if (cached) return cached;
+
+  const covered = new Set<ID>();
+  const roomEdges: Array<{ horizontal: boolean; at: number; from: number; to: number }> = [];
+
+  for (const id of project.order) {
+    const e = project.entities[id];
+    if (!e || e.type !== 'room') continue;
+    // Walls a room box owns are covered by definition.
+    for (const w of e.wallIds ?? []) covered.add(w);
+    const b = rectFromPoints(e.polygon);
+    roomEdges.push(
+      { horizontal: true, at: b.y, from: b.x, to: b.x + b.w },
+      { horizontal: true, at: b.y + b.h, from: b.x, to: b.x + b.w },
+      { horizontal: false, at: b.x, from: b.y, to: b.y + b.h },
+      { horizontal: false, at: b.x + b.w, from: b.y, to: b.y + b.h },
+    );
+  }
+
+  for (const id of project.order) {
+    const e = project.entities[id];
+    if (!e || e.type !== 'wall' || covered.has(id)) continue;
+    if (Math.abs(e.bulge) > 1e-4) continue;
+    const horizontal = Math.abs(e.a.y - e.b.y) < 1;
+    const vertical = Math.abs(e.a.x - e.b.x) < 1;
+    if (!horizontal && !vertical) continue;
+
+    // A wall lies "on" a room edge when its centreline is within half its own
+    // thickness of that edge and spans essentially the same run.
+    const tol = e.thickness / 2 + 2;
+    const at = horizontal ? e.a.y : e.a.x;
+    const lo = Math.min(horizontal ? e.a.x : e.a.y, horizontal ? e.b.x : e.b.y);
+    const hi = Math.max(horizontal ? e.a.x : e.a.y, horizontal ? e.b.x : e.b.y);
+
+    for (const edge of roomEdges) {
+      if (edge.horizontal !== horizontal) continue;
+      if (Math.abs(edge.at - at) > tol) continue;
+      if (lo <= edge.from + tol && hi >= edge.to - tol) {
+        covered.add(id);
+        break;
+      }
+    }
+  }
+
+  roomEdgeWallCache.set(project, covered);
+  return covered;
+}
+
+/** Length tags on walls that no room already dimensions. */
 function drawWallLengths(
   ctx: CanvasRenderingContext2D,
   project: Project,
@@ -989,6 +1188,7 @@ function drawWallLengths(
   px: number,
   vp: Viewport,
 ) {
+  const covered = wallsCoveredByRooms(project);
   const size = Math.min(Math.max(10 * px, 110), 260);
   ctx.save();
   ctx.font = `500 ${size}px Inter, system-ui, sans-serif`;
@@ -997,6 +1197,7 @@ function drawWallLengths(
   for (const id of order) {
     const e = project.entities[id];
     if (!e || e.type !== 'wall' || !isEntityVisible(project, e)) continue;
+    if (covered.has(id)) continue;
     if (!intersects(entityBounds(e, project), view)) continue;
     const L = wallLength(e);
     // Skip tags that would be wider than the wall they annotate.

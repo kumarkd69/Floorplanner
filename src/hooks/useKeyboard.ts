@@ -15,6 +15,7 @@ import {
 const TOOL_KEYS: Record<string, ToolId> = {
   v: 'select',
   h: 'pan',
+  p: 'plot',
   w: 'wall',
   c: 'wall-curved',
   r: 'room',
@@ -275,6 +276,7 @@ export const SHORTCUTS: Array<{ group: string; items: Array<[string, string]> }>
     items: [
       ['V', 'Select'],
       ['H', 'Pan'],
+      ['P', 'Plot / floor'],
       ['W', 'Wall'],
       ['C', 'Curved wall'],
       ['R', 'Room'],

@@ -115,6 +115,27 @@ export function snapPoint(raw: Vec2, ctx: SnapContext): SnapResult {
           }
         }
       }
+    } else if (e.type === 'plot') {
+      // The plot boundary is always a snap target: new work lands flush with
+      // the site edge rather than a hair inside or outside it.
+      const corners = [
+        { x: e.x, y: e.y },
+        { x: e.x + e.width, y: e.y },
+        { x: e.x + e.width, y: e.y + e.height },
+        { x: e.x, y: e.y + e.height },
+      ];
+      for (const p of corners) {
+        if (nearby(p)) candidates.push({ point: p, kind: 'corner', refId: id });
+      }
+      for (let i = 0; i < 4; i++) {
+        const a = corners[i];
+        const b = corners[(i + 1) % 4];
+        const c = closestOnSegment(raw, a, b);
+        if (c.dist <= tol) candidates.push({ point: c.point, kind: 'edge', refId: id });
+        if (settings.midpoint && nearby(mid(a, b))) {
+          candidates.push({ point: mid(a, b), kind: 'midpoint', refId: id });
+        }
+      }
     } else if (e.type === 'furniture' && settings.furniture) {
       const corners = furnitureCorners(e);
       for (const p of corners) if (nearby(p)) candidates.push({ point: p, kind: 'furniture', refId: id });

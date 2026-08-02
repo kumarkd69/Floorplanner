@@ -58,6 +58,27 @@ fail; every step before it (tests, type-check, build) still runs and passes.
 
 ## What it does
 
+**Everything is in feet.** One unit, everywhere — lengths in feet, areas in
+square feet. Inputs still accept `12'6"` or `18in` if that is how you think
+about a door, and convert on entry.
+
+**Draw rooms like rectangles in Figma.** Pick the Room tool and drag. The room
+appears with its four walls, its name, its dimensions and its area already on
+the drawing. Hold ⇧ for a square. Then set it exactly: type a width, a height,
+or a total square footage in the Layout panel and the walls move to match.
+
+**Start from a room, not a blank sheet.** 35 ready-made rooms — foyer, washroom,
+en-suite, puja room, utility, garage, balcony and the rest — each at a sensible
+size. Click one, click the plan, done.
+
+**A plot to build inside.** Draw the plot once and every room, wall and object
+snaps to it and is kept inside it. Resize the plot numerically like anything
+else.
+
+**Dimensions on the drawing itself.** Rooms carry their width, height and area;
+the plot carries its size; walls that no room already dimensions carry their
+length. Nothing has to be selected to be measured.
+
 **Drawing.** Straight, angled and curved walls that chain as you click and weld
 themselves at corners, so there are never gaps. Split, merge, extend, trim and
 offset walls. Doors and windows snap to walls and cannot be dragged off the end
@@ -109,9 +130,17 @@ src/
 
 A few decisions worth knowing about:
 
-**Everything is millimetres.** Units exist only at the presentation boundary
-(`core/units.ts`). Switching a project from feet to metres changes what you
-read, never where anything is — nothing is re-rounded and nothing moves.
+**Everything is millimetres internally.** Feet exist only at the presentation
+boundary (`core/units.ts`), so no arithmetic ever accumulates rounding error
+from a display unit.
+
+**Tools are strictly exclusive.** Switching tools abandons whatever the previous
+one had in flight and disarms anything it had staged, so a half-drawn wall can
+never keep rubber-banding under a new tool.
+
+**Rooms own their walls.** A room drawn as a rectangle records the four walls it
+created, so typing a new width moves exactly those walls — and dragging the room
+carries its enclosure with it.
 
 **Walls weld rather than track joints.** Instead of modelling joint objects,
 endpoints within 20 mm of each other are snapped onto a shared point after every

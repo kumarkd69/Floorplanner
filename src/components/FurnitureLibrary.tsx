@@ -107,7 +107,7 @@ export function FurnitureLibrary() {
               onClick={() => {
                 // Clicking arms the tool so the next canvas click places it —
                 // handy on touch devices where dragging is awkward.
-                store.setUI({ activeCatalogId: item.id, tool: 'furniture' });
+                store.setUI({ activeCatalogId: item.id, activePresetId: null, tool: 'furniture' });
               }}
             >
               <Thumb item={item} />
