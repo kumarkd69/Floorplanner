@@ -8,14 +8,37 @@ backend, no build-time codegen.
 
 ![Exported sheet](docs/sheet.png)
 
-## Running it
+## Running it in your browser
+
+Needs [Node.js](https://nodejs.org) 18 or newer (`node -v` to check).
 
 ```bash
+git clone https://github.com/kumarkd69/Floorplanner.git
+cd Floorplanner
+git checkout claude/floor-plan-creator-s028fo
 npm install
-npm run dev        # http://localhost:5173
-npm run build      # production bundle in dist/
-npm test           # unit tests for the geometry, unit, wall and export kernels
+npm run dev
 ```
+
+Then open **http://localhost:5173** — a sample 40 × 30 ft plan is already on the
+canvas. Edits save to your browser automatically and reload with the page.
+
+Other commands:
+
+```bash
+npm run build      # production bundle in dist/
+npm run preview    # serve that bundle at http://localhost:4173
+npm test           # 36 unit tests over the geometry, unit and export kernels
+```
+
+**`dist/index.html` will not work if you just double-click it.** Browsers block
+JavaScript modules loaded over `file://`, so you get a blank page. The build has
+to be served over HTTP — `npm run preview` is the quickest way, or any static
+server (`npx serve dist`, `python3 -m http.server`) will do.
+
+Asset paths in the build are relative, so `dist/` can be dropped anywhere —
+a domain root, a GitHub Pages project site, or an S3 prefix — without
+reconfiguration.
 
 ## What it does
 
