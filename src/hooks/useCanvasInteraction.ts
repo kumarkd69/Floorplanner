@@ -5,6 +5,7 @@ import type {
   Entity,
   Furniture,
   ID,
+  Project,
   TextNote,
   Vec2,
   Wall,
@@ -90,6 +91,16 @@ export interface InteractionApi {
 
 export function useCanvasInteraction(canvas: HTMLCanvasElement | null): InteractionApi {
   const interaction = useRef<Interaction>({ kind: 'none' });
+  /**
+   * The document as it stood when the current gesture began.
+   *
+   * Drags commit transiently — they mutate the project without pushing history
+   * so a gesture collapses into one undo step. That means Escape cannot use
+   * `undo()` to abandon a drag: there is no history entry for it, so undo would
+   * throw away whatever the user did *before* the drag instead. Restoring this
+   * snapshot is the only correct way to cancel.
+   */
+  const gestureStart = useRef<Project | null>(null);
   const spaceDown = useRef(false);
   const [overlay, setOverlay] = useState<Overlay>({});
   const [cursor, setCursor] = useState('default');
@@ -154,6 +165,7 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
 
   const cancel = useCallback(() => {
     interaction.current = { kind: 'none' };
+    gestureStart.current = null;
     setOverlay({});
     setContextMenu(null);
   }, []);
@@ -363,6 +375,7 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
       const handle = hitHandle(s.project, s.ui.selection, screen, s.viewport);
       if (handle) {
         const origins = snapshot(s.ui.selection);
+        gestureStart.current = s.project;
         if (handle === 'rotate') {
           const b = selectionBounds(s.project, s.ui.selection)!;
           const pivot = rectCenter(b);
@@ -403,6 +416,7 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
       // Dragging a door/window slides it along its host wall.
       if ((hit.type === 'door' || hit.type === 'window') && !additive) {
         if (!s.ui.selection.includes(hit.id)) store.setSelection([hit.id]);
+        gestureStart.current = s.project;
         interaction.current = { kind: 'opening-drag', id: hit.id };
         return;
       }
@@ -457,6 +471,7 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
         case 'maybe-drag': {
           if (dist(screen, cur.start) < DRAG_THRESHOLD) return;
           const origins = snapshot(cur.ids);
+          gestureStart.current = s.project;
           interaction.current = {
             kind: 'move',
             worldStart: cur.worldStart,
@@ -725,6 +740,9 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
       const world = toWorld(ev);
       const cur = interaction.current;
 
+      // The gesture is over: whatever it produced is now the committed state.
+      if (cur.kind !== 'pan') gestureStart.current = null;
+
       switch (cur.kind) {
         case 'pan':
           interaction.current = { kind: 'none' };
@@ -910,9 +928,11 @@ export function useCanvasInteraction(canvas: HTMLCanvasElement | null): Interact
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      const cur = interaction.current;
-      if (cur.kind === 'move' || cur.kind === 'resize' || cur.kind === 'rotate' || cur.kind === 'wall-endpoint') {
-        store.undo();
+      const original = gestureStart.current;
+      if (original) {
+        // Put the document back exactly as it was, without touching history.
+        store.commit('Cancel', () => original, { transient: true });
+        gestureStart.current = null;
       }
       cancel();
     };
