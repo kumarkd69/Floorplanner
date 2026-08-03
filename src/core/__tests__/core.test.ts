@@ -25,7 +25,7 @@ import {
 } from '../units';
 import { classifyRoom, detectEnclosures } from '../rooms';
 import { clampOpeningT, openingsOverlap, wallLength, wallOutline } from '../entities';
-import { mergeWalls, splitWall, weldWallJoints } from '../wallOps';
+import { fuseCollinearWalls, mergeWalls, splitWall, weldWallJoints } from '../wallOps';
 import { snapPoint } from '../snapping';
 import { createProject } from '@/state/project';
 import { toDXF } from '@/export/dxf';
@@ -36,6 +36,7 @@ import {
   resizeRoomBox,
   roomRect,
   setRoomArea,
+  snapRoomRect,
 } from '../roomBox';
 import { mm2OfSqft, sqftOf } from '../units';
 import { MM_PER_CSS_PX, scaleDenominator } from '@/export';
@@ -550,5 +551,154 @@ describe('room boxes', () => {
     expect(roomRect(room)).not.toBeNull();
     const L = { ...room, polygon: [...room.polygon, { x: 500, y: 1500 }] };
     expect(roomRect(L)).toBeNull();
+  });
+});
+
+/* ------------------------------------------------------- shared walls */
+
+describe('side-by-side rooms', () => {
+  const T = 100; // wall thickness
+
+  /** Add a room box to a project, returning the updated project and the room. */
+  function addRoom(p: Project, rect: { x: number; y: number; w: number; h: number }, name: string) {
+    const { room, walls } = buildRoomBox(p, { rect, name, wallThickness: T, wallHeight: 2743 });
+    const entities = { ...p.entities };
+    const order = [...p.order];
+    for (const e of [...walls, room]) {
+      entities[e.id] = e;
+      order.push(e.id);
+    }
+    return { project: { ...p, entities, order }, room };
+  }
+
+  const blank = () => createProject({ name: 'T', width: 60, height: 40, unit: 'ft', outerWalls: false });
+
+  it('snaps a new room to sit flush against its neighbour', () => {
+    const first = addRoom(blank(), { x: 0, y: 0, w: mmOfFeet(12), h: mmOfFeet(10) }, 'A');
+    // A rectangle dropped a sloppy 40 mm away from the neighbour's right edge.
+    const sloppy = { x: mmOfFeet(12) + T + 40, y: 37, w: mmOfFeet(10), h: mmOfFeet(10) };
+    const fit = snapRoomRect(first.project, sloppy, { tolerance: 200, wallThickness: T });
+
+    // Exactly one wall thickness of separation => a single shared wall.
+    expect(fit.rect.x).toBeCloseTo(mmOfFeet(12) + T, 6);
+    // And the top edges line up.
+    expect(fit.rect.y).toBeCloseTo(0, 6);
+    expect(fit.guides.length).toBeGreaterThan(0);
+  });
+
+  it('leaves a room alone when there is nothing near to snap to', () => {
+    const first = addRoom(blank(), { x: 0, y: 0, w: mmOfFeet(12), h: mmOfFeet(10) }, 'A');
+    const far = { x: mmOfFeet(30), y: mmOfFeet(25), w: mmOfFeet(8), h: mmOfFeet(6) };
+    const fit = snapRoomRect(first.project, far, { tolerance: 200, wallThickness: T });
+    expect(fit.rect).toEqual(far);
+    expect(fit.guides).toHaveLength(0);
+  });
+
+  it('fuses the two coincident walls of abutting rooms into one', () => {
+    let p = blank();
+    const a = addRoom(p, { x: 0, y: 0, w: mmOfFeet(12), h: mmOfFeet(10) }, 'A');
+    p = a.project;
+    // Placed to share a wall: exactly one thickness of gap, same height.
+    const b = addRoom(p, { x: mmOfFeet(12) + T, y: 0, w: mmOfFeet(10), h: mmOfFeet(10) }, 'B');
+    p = b.project;
+
+    const before = Object.values(p.entities).filter((e) => e.type === 'wall').length;
+    expect(before).toBe(8);
+
+    p = fuseCollinearWalls(p);
+    const after = Object.values(p.entities).filter((e) => e.type === 'wall').length;
+    // Three fusions: the shared party wall, plus the two rooms' top walls and
+    // bottom walls each running on into a single continuous wall. Eight
+    // separate walls become five real ones.
+    expect(after).toBe(5);
+
+    const roomA = p.entities[a.room.id];
+    const roomB = p.entities[b.room.id];
+    expect(roomA.type).toBe('room');
+    expect(roomB.type).toBe('room');
+    if (roomA.type === 'room' && roomB.type === 'room') {
+      const shared = roomA.wallIds!.filter((w) => roomB.wallIds!.includes(w));
+      expect(shared).toHaveLength(3);
+      // Every referenced wall still exists.
+      for (const w of [...roomA.wallIds!, ...roomB.wallIds!]) expect(p.entities[w]).toBeTruthy();
+    }
+
+    // The party wall spans the full shared height and sits between the rooms.
+    const party = (p.entities[a.room.id] as never as { wallIds: string[] }).wallIds
+      .map((w) => p.entities[w])
+      .filter((w): w is Wall => w.type === 'wall')
+      .find((w) => Math.abs(w.a.x - w.b.x) < 1 && Math.abs(w.a.x - (mmOfFeet(12) + T / 2)) < 1);
+    expect(party).toBeTruthy();
+  });
+
+  it('never fuses walls of different thickness', () => {
+    let p = blank();
+    const a = addRoom(p, { x: 0, y: 0, w: mmOfFeet(12), h: mmOfFeet(10) }, 'A');
+    p = a.project;
+    const { room, walls } = buildRoomBox(p, {
+      rect: { x: mmOfFeet(12) + 300, y: 0, w: mmOfFeet(10), h: mmOfFeet(10) },
+      name: 'B',
+      wallThickness: 300,
+      wallHeight: 2743,
+    });
+    const entities = { ...p.entities };
+    const order = [...p.order];
+    for (const e of [...walls, room]) {
+      entities[e.id] = e;
+      order.push(e.id);
+    }
+    p = { ...p, entities, order };
+
+    const before = Object.values(p.entities).filter((e) => e.type === 'wall').length;
+    p = fuseCollinearWalls(p);
+    const after = Object.values(p.entities).filter((e) => e.type === 'wall').length;
+    expect(after).toBe(before);
+  });
+
+  it('keeps a door in place when its wall is absorbed by a longer one', () => {
+    let p = blank();
+    // Two collinear walls end to end, with a door on the shorter one.
+    const w1: Wall = { ...makeWall(0, 0, 3000, 0), id: 'w1', thickness: 100 };
+    const w2: Wall = { ...makeWall(3000, 0, 9000, 0), id: 'w2', thickness: 100 };
+    p = { ...p, entities: { ...p.entities, w1, w2 }, order: [...p.order, 'w1', 'w2'] };
+    p.entities.d1 = {
+      id: 'd1', type: 'door', layerId: 'L', wallId: 'w1', t: 0.5,
+      width: 900, height: 2032, kind: 'single', swing: 'left', direction: 'in',
+      frame: '', material: '', locked: false, hidden: false,
+    };
+    p.order.push('d1');
+
+    const worldBefore = 1500; // x of the door centre
+    p = fuseCollinearWalls(p);
+
+    const walls = Object.values(p.entities).filter((e): e is Wall => e.type === 'wall');
+    expect(walls).toHaveLength(1);
+    const door = p.entities.d1;
+    expect(door.type).toBe('door');
+    if (door.type === 'door') {
+      const host = p.entities[door.wallId] as Wall;
+      const x = host.a.x + (host.b.x - host.a.x) * door.t;
+      expect(x).toBeCloseTo(worldBefore, 1);
+    }
+  });
+
+  it('un-shares a fused wall when one room is resized away from it', () => {
+    let p = blank();
+    const a = addRoom(p, { x: 0, y: 0, w: mmOfFeet(12), h: mmOfFeet(10) }, 'A');
+    p = a.project;
+    const b = addRoom(p, { x: mmOfFeet(12) + T, y: 0, w: mmOfFeet(10), h: mmOfFeet(10) }, 'B');
+    p = fuseCollinearWalls(b.project);
+
+    const bBefore = roomRect(p.entities[b.room.id] as never)!;
+
+    // Shrink A: the shared wall must move for A without dragging B with it.
+    p = resizeRoomBox(p, a.room.id, { w: mmOfFeet(8) });
+
+    const aAfter = roomRect(p.entities[a.room.id] as never)!;
+    const bAfter = roomRect(p.entities[b.room.id] as never)!;
+    expect(feetOf(aAfter.w)).toBeCloseTo(8, 6);
+    // B is untouched.
+    expect(bAfter.x).toBeCloseTo(bBefore.x, 6);
+    expect(bAfter.w).toBeCloseTo(bBefore.w, 6);
   });
 });

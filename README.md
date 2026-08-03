@@ -71,6 +71,12 @@ or a total square footage in the Layout panel and the walls move to match.
 en-suite, puja room, utility, garage, balcony and the rest — each at a sensible
 size. Click one, click the plan, done.
 
+**Rooms share walls.** Place two rooms side by side and they land flush against
+each other with exactly one wall between them — not two stacked walls, not a
+sliver of a gap. Coincident walls are then fused into a single wall, and runs
+that continue past a junction become one continuous wall. Move a room away
+again and the shared wall separates cleanly.
+
 **A plot to build inside.** Draw the plot once and every room, wall and object
 snaps to it and is kept inside it. Resize the plot numerically like anything
 else.
@@ -140,7 +146,15 @@ never keep rubber-banding under a new tool.
 
 **Rooms own their walls.** A room drawn as a rectangle records the four walls it
 created, so typing a new width moves exactly those walls — and dragging the room
-carries its enclosure with it.
+carries its enclosure with it. When a wall ends up shared with a neighbour,
+editing one room clones it rather than dragging the neighbour along.
+
+**Neighbours outrank the grid.** A grid step is a foot and a wall is four
+inches, so a grid-snapped edge can never sit exactly one wall from its
+neighbour. Room placement therefore snaps to neighbours first and falls back to
+the grid only on the axes that found nothing to latch onto. Alignments are
+offered per edge: two left edges may always line up, but this room's right edge
+only snaps to another's left when the two genuinely sit alongside each other.
 
 **Walls weld rather than track joints.** Instead of modelling joint objects,
 endpoints within 20 mm of each other are snapped onto a shared point after every

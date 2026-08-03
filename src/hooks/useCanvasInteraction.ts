@@ -38,10 +38,13 @@ import { pickEntity, pickInRect } from '@/core/pick';
 import { alignmentSnap, snapPoint } from '@/core/snapping';
 import { moveWallEndpoint, splitWall } from '@/core/wallOps';
 import {
+  applyRoomRect,
   buildRoomBox,
   clampPointToPlot,
   clampRectToPlot,
   findPlot,
+  placeRoomRect,
+  roomRect,
 } from '@/core/roomBox';
 import { PRESET_BY_ID, presetSizeMM } from '@/data/roomPresets';
 import { formatArea, formatAngle, formatLength } from '@/core/units';
@@ -130,6 +133,8 @@ export function useCanvasInteraction(
    * snapshot is the only correct way to cancel.
    */
   const gestureStart = useRef<Project | null>(null);
+  /** The snapped rectangle shown in the last preview frame. */
+  const draftRect = useRef<Rect | null>(null);
   const spaceDown = useRef(false);
   const [overlay, setOverlay] = useState<Overlay>({});
   const [cursor, setCursor] = useState('default');
@@ -355,8 +360,12 @@ export function useCanvasInteraction(
         case 'room':
         case 'plot': {
           // Rectangle drag, exactly like drawing a rectangle in Figma.
-          const snapped = snapPoint(world, snapCtx());
-          const start = tool === 'room' ? clampPointToPlot(snapped.point, findPlot(s.project)) : snapped.point;
+          //
+          // The start corner is kept raw. Snapping the corner here and the
+          // opposite corner later would size the rectangle from one snapped and
+          // one unsnapped point, so the room came out a different size than the
+          // one dragged; the whole rectangle is placed at once instead.
+          const start = tool === 'room' ? clampPointToPlot(world, findPlot(s.project)) : world;
           interaction.current = { kind: 'draw-rect', target: tool, start, current: start };
           return;
         }
@@ -531,6 +540,45 @@ export function useCanvasInteraction(
           const ids = [...cur.origins.keys()];
           const exclude = new Set(ids);
           let delta = sub(world, cur.worldStart);
+
+          // Dragging a single room box: snap its rectangle to the neighbours so
+          // it lands sharing a wall rather than a hair away from one.
+          const movingRooms = [...cur.origins.values()].filter((e) => e.type === 'room');
+          if (movingRooms.length === 1 && movingRooms[0].type === 'room') {
+            const base = roomRect(movingRooms[0]);
+            if (base) {
+              const fit = placeRoomRect(
+                s.project,
+                { x: base.x + delta.x, y: base.y + delta.y, w: base.w, h: base.h },
+                {
+                  worldPerPx: 1 / s.viewport.scale,
+                  wallThickness: s.project.wallDefaults.interiorThickness,
+                  snapEnabled: s.ui.snap.enabled,
+                  gridSize: s.project.gridSize,
+                  excludeIds: exclude,
+                },
+              );
+              const target = clampRectToPlot(fit.rect, findPlot(s.project));
+              store.commit('Move', (p) => applyRoomRect(p, movingRooms[0].id, target), {
+                transient: true,
+              });
+              setOverlay({
+                guides: fit.guides,
+                callouts: [
+                  {
+                    at: world,
+                    text: `${formatLength(target.w, undefined, { compact: true })} × ${formatLength(
+                      target.h,
+                      undefined,
+                      { compact: true },
+                    )}`,
+                  },
+                ],
+              });
+              interaction.current = { ...cur, last: world };
+              return;
+            }
+          }
 
           // Snap the dragged bounds, then look for alignment with the rest.
           const startBounds = boundsOf(cur.origins, s.project);
@@ -715,17 +763,31 @@ export function useCanvasInteraction(
         }
 
         case 'draw-rect': {
-          const snapped = snapPoint(world, snapCtx(undefined, cur.start));
-          const raw = cur.target === 'room'
-            ? clampPointToPlot(snapped.point, findPlot(s.project))
-            : snapped.point;
+          // The raw pointer position — deliberately *not* grid-snapped, because
+          // the rectangle as a whole is placed below, where neighbours outrank
+          // the grid.
+          const target = cur.target === 'room' ? clampPointToPlot(world, findPlot(s.project)) : world;
           // Shift constrains to a square, as it does in Figma.
-          const end = ev.shiftKey ? squareFrom(cur.start, raw) : raw;
+          const end = ev.shiftKey ? squareFrom(cur.start, target) : target;
           interaction.current = { ...cur, current: end };
 
-          const rect = rectFromCorners(cur.start, end);
+          const fit = placeRoomRect(s.project, rectFromCorners(cur.start, end), {
+            worldPerPx: 1 / s.viewport.scale,
+            wallThickness: s.project.wallDefaults.interiorThickness,
+            snapEnabled: s.ui.snap.enabled,
+            gridSize: s.project.gridSize,
+            // The plot has no neighbours to share a wall with; it just lands
+            // on the grid.
+            excludeIds:
+              cur.target === 'plot'
+                ? new Set(s.project.order.filter((id) => s.project.entities[id]?.type === 'room'))
+                : undefined,
+          });
+          const rect = fit.rect;
+          const snapped = snapPoint(world, snapCtx(undefined, cur.start));
           setOverlay({
             snap: snapped,
+            guides: fit.guides,
             draft: { kind: 'room', points: polygonOf(rect) },
             callouts: [
               {
@@ -742,6 +804,7 @@ export function useCanvasInteraction(
             world,
             hint: `${formatLength(rect.w)} × ${formatLength(rect.h)} · ${formatArea(rect.w * rect.h)}`,
           });
+          draftRect.current = rect;
           return;
         }
 
@@ -795,15 +858,17 @@ export function useCanvasInteraction(
         const preset = PRESET_BY_ID.get(s.ui.activePresetId);
         if (preset) {
           const size = presetSizeMM(preset);
-          const snapped = snapPoint(world, snapCtx());
-          const rect = clampRectToPlot(
-            { x: snapped.point.x, y: snapped.point.y, w: size.w, h: size.h },
-            findPlot(s.project),
-          );
+          const fit = placeRoomRect(s.project, { x: world.x, y: world.y, w: size.w, h: size.h }, {
+            worldPerPx: 1 / s.viewport.scale,
+            wallThickness: s.project.wallDefaults.interiorThickness,
+            snapEnabled: s.ui.snap.enabled,
+            gridSize: s.project.gridSize,
+          });
+          const rect = clampRectToPlot(fit.rect, findPlot(s.project));
           setOverlay({
-            snap: snapped,
+            guides: fit.guides,
             draft: { kind: 'room', points: polygonOf(rect) },
-            callouts: [{ at: snapped.point, text: `${preset.name}  ${preset.wFt}' × ${preset.hFt}'` }],
+            callouts: [{ at: world, text: `${preset.name}  ${preset.wFt}' × ${preset.hFt}'` }],
           });
           setCursor('copy');
           return;
@@ -857,7 +922,11 @@ export function useCanvasInteraction(
           const ids = [...cur.origins.keys()];
           const hasWall = ids.some((id) => s.project.entities[id]?.type === 'wall');
           // Re-commit as a real history entry now the gesture is over.
-          store.commit('Move', (p) => ({ ...p }), { weld: hasWall ? ids : undefined, reflowRooms: hasWall });
+          store.commit('Move', (p) => ({ ...p }), {
+            weld: hasWall ? ids : undefined,
+            fuse: true,
+            reflowRooms: true,
+          });
           interaction.current = { kind: 'none' };
           setOverlay({});
           return;
@@ -902,7 +971,9 @@ export function useCanvasInteraction(
           return;
 
         case 'draw-rect': {
-          const rect = rectFromCorners(cur.start, cur.current);
+          // Commit exactly what the preview showed, snapping included.
+          const rect = draftRect.current ?? rectFromCorners(cur.start, cur.current);
+          draftRect.current = null;
           // Ignore an accidental click that produced no area.
           if (rect.w > 200 && rect.h > 200) {
             if (cur.target === 'plot') commitPlot(rect);
@@ -1003,7 +1074,14 @@ export function useCanvasInteraction(
   /** A drawn rectangle becomes a room plus the four walls enclosing it. */
   function commitRoomRect(rect: Rect, preset?: { name: string; roomType: Room['roomType'] }) {
     const s = store.getState();
-    const clamped = clampRectToPlot(rect, findPlot(s.project));
+    const t = s.project.wallDefaults.interiorThickness;
+    const fit = placeRoomRect(s.project, rect, {
+      worldPerPx: 1 / s.viewport.scale,
+      wallThickness: t,
+      snapEnabled: s.ui.snap.enabled,
+      gridSize: s.project.gridSize,
+    });
+    const clamped = clampRectToPlot(fit.rect, findPlot(s.project));
     const { room, walls } = buildRoomBox(s.project, {
       rect: clamped,
       name: preset?.name,
@@ -1013,6 +1091,7 @@ export function useCanvasInteraction(
     });
     store.addEntities(preset ? `Add ${preset.name}` : 'Draw room', [...walls, room], {
       weld: walls.map((w) => w.id),
+      fuse: true,
       reflowRooms: true,
     });
     store.setSelection([room.id]);
@@ -1048,9 +1127,8 @@ export function useCanvasInteraction(
     const preset = PRESET_BY_ID.get(presetId);
     if (!preset) return;
     const size = presetSizeMM(preset);
-    const snapped = snapPoint(world, snapCtx());
     commitRoomRect(
-      { x: snapped.point.x, y: snapped.point.y, w: size.w, h: size.h },
+      { x: world.x, y: world.y, w: size.w, h: size.h },
       { name: preset.name, roomType: preset.roomType },
     );
   }

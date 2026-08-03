@@ -772,12 +772,14 @@ function RoomInspector({ room }: { room: Room }) {
           onSize={(next) =>
             store.commit('Resize room', (p) => resizeRoomBox(p, room.id, next), {
               reflowRooms: true,
+              fuse: true,
               weld: room.wallIds,
             })
           }
           onArea={(mm2) =>
             store.commit('Set room area', (p) => setRoomArea(p, room.id, mm2), {
               reflowRooms: true,
+              fuse: true,
               weld: room.wallIds,
             })
           }

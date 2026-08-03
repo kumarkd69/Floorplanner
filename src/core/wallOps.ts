@@ -236,3 +236,168 @@ export function moveWallEndpoint(
   }
   return weldWallJoints({ ...project, entities }, touched);
 }
+
+/* -------------------------------------------------- fusing shared walls */
+
+/** Centrelines closer than this are the same line (mm). */
+const COLLINEAR_TOL = 12;
+
+interface WallLine {
+  /** Unit direction, normalised so opposite-facing walls group together. */
+  dx: number;
+  dy: number;
+  /** Signed perpendicular offset of the line from the origin. */
+  offset: number;
+}
+
+function lineOf(w: Wall): WallLine | null {
+  if (Math.abs(w.bulge) > 1e-4) return null;
+  let dx = w.b.x - w.a.x;
+  let dy = w.b.y - w.a.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return null;
+  dx /= len;
+  dy /= len;
+  // Canonical direction so a wall and its reverse land in the same group.
+  if (dx < -1e-9 || (Math.abs(dx) < 1e-9 && dy < 0)) {
+    dx = -dx;
+    dy = -dy;
+  }
+  // Perpendicular offset: the component of `a` across the line.
+  const offset = -dy * w.a.x + dx * w.a.y;
+  return { dx, dy, offset };
+}
+
+/** Position along the line's direction. */
+const along = (line: WallLine, p: Vec2): number => line.dx * p.x + line.dy * p.y;
+
+/**
+ * Fuse walls that lie on the same line and touch or overlap into single walls.
+ *
+ * Two rooms placed side by side each build their own four walls, which leaves
+ * two coincident walls on the shared edge. Left alone they read as a double
+ * wall and behave as two objects. This merges them into one: the survivor spans
+ * the union of both runs, every room that referenced either wall is repointed
+ * at it, and doors and windows are re-parameterised onto the longer host so
+ * they stay exactly where they were drawn.
+ *
+ * Only walls of equal thickness are fused — a thin partition meeting a thick
+ * exterior wall is genuinely two different walls.
+ */
+export function fuseCollinearWalls(project: Project): Project {
+  const walls = wallsOf(project);
+  if (walls.length < 2) return project;
+
+  // Bucket by line and thickness. Rounding the key makes near-coincident
+  // centrelines land together; exact comparison happens inside the group.
+  const groups = new Map<string, Wall[]>();
+  for (const w of walls) {
+    const line = lineOf(w);
+    if (!line) continue;
+    const key = [
+      Math.round(line.dx * 1000),
+      Math.round(line.dy * 1000),
+      Math.round(line.offset / COLLINEAR_TOL),
+      Math.round(w.thickness),
+    ].join(':');
+    const list = groups.get(key);
+    if (list) list.push(w);
+    else groups.set(key, [w]);
+  }
+
+  const merges: Array<{ keep: Wall; absorb: Wall[]; a: Vec2; b: Vec2 }> = [];
+
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const line = lineOf(group[0])!;
+
+    // Sort by start position and sweep, accumulating runs that touch.
+    const spans = group
+      .map((w) => {
+        const s = along(line, w.a);
+        const e = along(line, w.b);
+        return { w, lo: Math.min(s, e), hi: Math.max(s, e) };
+      })
+      .sort((m, n) => m.lo - n.lo);
+
+    let run = [spans[0]];
+    let hi = spans[0].hi;
+
+    const flush = () => {
+      if (run.length < 2) return;
+      const lo = run[0].lo;
+      // Longest member survives, so its id (and any openings on it) is kept.
+      const keep = run.reduce((best, s) => (s.hi - s.lo > best.hi - best.lo ? s : best), run[0]).w;
+      const pa = { x: line.dx * lo - line.dy * line.offset, y: line.dy * lo + line.dx * line.offset };
+      const pb = { x: line.dx * hi - line.dy * line.offset, y: line.dy * hi + line.dx * line.offset };
+      merges.push({ keep, absorb: run.map((s) => s.w).filter((w) => w.id !== keep.id), a: pa, b: pb });
+    };
+
+    for (let i = 1; i < spans.length; i++) {
+      // A tolerance-sized bridge counts as touching, so butt joints fuse too.
+      if (spans[i].lo <= hi + COLLINEAR_TOL) {
+        run.push(spans[i]);
+        hi = Math.max(hi, spans[i].hi);
+      } else {
+        flush();
+        run = [spans[i]];
+        hi = spans[i].hi;
+      }
+    }
+    flush();
+  }
+
+  if (merges.length === 0) return project;
+
+  const entities = { ...project.entities };
+  const doomed = new Set<ID>();
+
+  for (const m of merges) {
+    const keepWall = entities[m.keep.id];
+    if (!keepWall || keepWall.type !== 'wall') continue;
+
+    const oldLength = wallLength(keepWall);
+    const keepStart = keepWall.a;
+    const merged: Wall = { ...keepWall, a: m.a, b: m.b };
+    const newLength = wallLength(merged);
+    entities[m.keep.id] = merged;
+
+    // Re-parameterise the survivor's own openings onto the longer wall.
+    const shift = dist(m.a, keepStart);
+    const forward = dist(m.a, keepStart) <= dist(m.b, keepStart);
+    for (const op of openingsOnWall(project, m.keep.id)) {
+      const cur = entities[op.id];
+      if (!cur || (cur.type !== 'door' && cur.type !== 'window')) continue;
+      const alongOld = (forward ? op.t : 1 - op.t) * oldLength;
+      entities[op.id] = { ...cur, t: newLength > 0 ? (shift + alongOld) / newLength : 0.5 };
+    }
+
+    for (const gone of m.absorb) {
+      doomed.add(gone.id);
+      // Move that wall's openings onto the survivor at the same world position.
+      for (const op of openingsOnWall(project, gone.id)) {
+        const cur = entities[op.id];
+        if (!cur || (cur.type !== 'door' && cur.type !== 'window')) continue;
+        const world = wallPointAt(gone, op.t);
+        const t = newLength > 0 ? (along(lineOf(merged)!, world) - along(lineOf(merged)!, m.a)) / newLength : 0.5;
+        entities[op.id] = { ...cur, wallId: m.keep.id, t: Math.max(0, Math.min(1, t)) };
+      }
+    }
+  }
+
+  if (doomed.size === 0) return project;
+
+  // Repoint every room at the surviving wall.
+  const survivorOf = new Map<ID, ID>();
+  for (const m of merges) for (const gone of m.absorb) survivorOf.set(gone.id, m.keep.id);
+
+  for (const id of project.order) {
+    const e = entities[id];
+    if (!e || e.type !== 'room' || !e.wallIds) continue;
+    const next = e.wallIds.map((w) => survivorOf.get(w) ?? w);
+    if (next.some((w, i) => w !== e.wallIds![i])) entities[id] = { ...e, wallIds: next };
+  }
+
+  for (const id of doomed) delete entities[id];
+  return { ...project, entities, order: project.order.filter((id) => !doomed.has(id)) };
+}

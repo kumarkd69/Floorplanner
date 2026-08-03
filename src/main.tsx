@@ -6,6 +6,7 @@ import * as exporters from './export';
 import * as renderer from './render/renderer';
 import { projectBounds } from './core/entities';
 import { CATALOG_BY_ID } from './data/catalog';
+import * as roomBox from './core/roomBox';
 import { toSVG } from './export/svg';
 import { toDXF } from './export/dxf';
 import './styles/global.css';
@@ -24,12 +25,14 @@ declare global {
     __fpExport: typeof exporters & { toSVG: typeof toSVG; toDXF: typeof toDXF };
     __fpRender: typeof renderer & { projectBounds: typeof projectBounds };
     __fpCatalog: typeof CATALOG_BY_ID;
+    __fpRoom: typeof roomBox;
   }
 }
 window.__fpStore = store;
 window.__fpExport = { ...exporters, toSVG, toDXF };
 window.__fpRender = { ...renderer, projectBounds };
 window.__fpCatalog = CATALOG_BY_ID;
+window.__fpRoom = roomBox;
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element is missing from index.html');

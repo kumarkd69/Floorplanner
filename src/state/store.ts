@@ -9,7 +9,7 @@ import type {
 import { uid } from '@/core/id';
 import { DEFAULT_SNAP } from '@/core/snapping';
 import { syncAutoRooms } from '@/core/rooms';
-import { weldWallJoints } from '@/core/wallOps';
+import { fuseCollinearWalls, weldWallJoints } from '@/core/wallOps';
 import { createSampleProject } from './project';
 
 export interface AppState {
@@ -25,6 +25,11 @@ export interface CommitOptions {
   reflowRooms?: boolean;
   /** Weld wall endpoints; pass the ids that moved. */
   weld?: ID[];
+  /**
+   * Fuse walls that ended up lying on the same line, so two rooms placed side
+   * by side share one wall instead of stacking two.
+   */
+  fuse?: boolean;
   /**
    * Fold into the previous history entry instead of pushing a new one — used
    * for continuous gestures so a drag is one undo step, not two hundred.
@@ -112,6 +117,8 @@ export class Store {
     if (next === this.state.project) return;
 
     if (opts.weld && opts.weld.length > 0) next = weldWallJoints(next, opts.weld);
+    // Fusing before room reflow so detection sees the final wall set.
+    if (opts.fuse) next = fuseCollinearWalls(next);
     if (opts.reflowRooms) next = syncAutoRooms(next);
     next = { ...next, updatedAt: new Date().toISOString() };
 
