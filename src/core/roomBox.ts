@@ -344,6 +344,10 @@ export function snapRoomRect(
     if (!e || exclude.has(id) || e.hidden) continue;
 
     if (e.type === 'room') {
+      // An auto room's outline follows wall centrelines, not their faces, so
+      // its edges are the wrong thing to align a clear rectangle to. The walls
+      // themselves are offered below and are the correct target.
+      if (e.auto) continue;
       const r = roomRect(e);
       if (!r) continue;
       const spanY = { from: r.y, to: r.y + r.h };
@@ -372,20 +376,49 @@ export function snapRoomRect(
         topC.push({ value: r.y + r.h, ...spanX });
         bottomC.push({ value: r.y, ...spanX });
       }
+    } else if (e.type === 'wall' && Math.abs(e.bulge) < 1e-4) {
+      // Walls are magnetic on their faces, so a room can be pushed up against
+      // any wall — including the exterior shell, which is not part of any room
+      // rectangle and would otherwise offer nothing to latch onto.
+      const vertical = Math.abs(e.a.x - e.b.x) < 1;
+      const horizontal = Math.abs(e.a.y - e.b.y) < 1;
+      // Two ways to sit against an existing wall, both of which end up as one
+      // wall on the drawing rather than two:
+      //   share  — this room's own wall lands exactly on the existing
+      //            centreline, so the two fuse (equal thicknesses).
+      //   inset  — the clear space starts at the existing wall's inner face,
+      //            so this room's thinner wall falls inside the thicker one and
+      //            is absorbed by it. This is the exterior-shell case.
+      const share = t / 2;
+      const inset = e.thickness / 2;
+      if (vertical) {
+        const cx = e.a.x;
+        const span = { from: Math.min(e.a.y, e.b.y), to: Math.max(e.a.y, e.b.y) };
+        if (overlaps(rect.y, rect.y + rect.h, span.from, span.to)) {
+          leftC.push({ value: cx + share, ...span }, { value: cx + inset, ...span });
+          rightC.push({ value: cx - share, ...span }, { value: cx - inset, ...span });
+        }
+      } else if (horizontal) {
+        const cy = e.a.y;
+        const span = { from: Math.min(e.a.x, e.b.x), to: Math.max(e.a.x, e.b.x) };
+        if (overlaps(rect.x, rect.x + rect.w, span.from, span.to)) {
+          topC.push({ value: cy + share, ...span }, { value: cy + inset, ...span });
+          bottomC.push({ value: cy - share, ...span }, { value: cy - inset, ...span });
+        }
+      }
     } else if (e.type === 'plot') {
-      // Against the plot the room sits on, or just inside, the boundary.
+      // The plot outline is where an exterior wall's *centreline* runs, not its
+      // inner face — so a room whose clear edge landed on the outline would sit
+      // half inside the wall. The candidate offered is therefore the position
+      // at which this room's own wall would be centred on the boundary. Where a
+      // real exterior wall exists, its faces are offered above and win, being
+      // nearer.
       const spanY = { from: e.y, to: e.y + e.height };
       const spanX = { from: e.x, to: e.x + e.width };
-      leftC.push({ value: e.x, ...spanY }, { value: e.x + t / 2, ...spanY });
-      rightC.push(
-        { value: e.x + e.width, ...spanY },
-        { value: e.x + e.width - t / 2, ...spanY },
-      );
-      topC.push({ value: e.y, ...spanX }, { value: e.y + t / 2, ...spanX });
-      bottomC.push(
-        { value: e.y + e.height, ...spanX },
-        { value: e.y + e.height - t / 2, ...spanX },
-      );
+      leftC.push({ value: e.x + t / 2, ...spanY });
+      rightC.push({ value: e.x + e.width - t / 2, ...spanY });
+      topC.push({ value: e.y + t / 2, ...spanX });
+      bottomC.push({ value: e.y + e.height - t / 2, ...spanX });
     }
   }
 
@@ -474,7 +507,7 @@ export function placeRoomRect(
   });
 
   const g = opts.gridSize;
-  const rect = { ...fit.rect };
+  let rect = { ...fit.rect };
   if (!fit.snappedX && g > 0) {
     const x = Math.round(rect.x / g) * g;
     rect.w = Math.max(g, Math.round((rect.x + rect.w) / g) * g - x);
@@ -485,5 +518,105 @@ export function placeRoomRect(
     rect.h = Math.max(g, Math.round((rect.y + rect.h) / g) * g - y);
     rect.y = y;
   }
+  // Finally, never leave the room sitting on top of another one.
+  rect = resolveRoomOverlap(project, rect, {
+    wallThickness: opts.wallThickness,
+    excludeIds: opts.excludeIds,
+  });
   return { ...fit, rect };
+}
+
+/* ------------------------------------------------------ overlap resolution */
+
+/**
+ * Push a room rectangle out of any room it overlaps.
+ *
+ * Rooms are quoted at their clear internal size, so a stack of rooms needs its
+ * clear heights *plus* a wall between each pair. Three rooms of 11', 6' and 15'
+ * do not fit in 32' of ground — they need 32' 8", the extra being the two 4"
+ * walls. Silently letting them overlap hides that; pushing them apart makes the
+ * shortfall visible on the drawing, which is the honest outcome.
+ *
+ * The push is along whichever axis needs the smaller correction, so a room
+ * nudged slightly into its neighbour settles back against it rather than
+ * jumping across the plan.
+ */
+export function resolveRoomOverlap(
+  project: Project,
+  rect: Rect,
+  opts: { wallThickness: number; excludeIds?: Set<ID> },
+): Rect {
+  const t = opts.wallThickness;
+  const exclude = opts.excludeIds ?? new Set<ID>();
+  let out = { ...rect };
+
+  // A few passes so a room squeezed between two others settles.
+  for (let pass = 0; pass < 4; pass++) {
+    let moved = false;
+
+    for (const id of project.order) {
+      const e = project.entities[id];
+      if (!e || e.type !== 'room' || exclude.has(id) || e.hidden) continue;
+      // Auto-detected rooms describe whatever space the walls happen to
+      // enclose — including the whole floor. Treating them as obstacles would
+      // push every new room out of the building.
+      if (e.auto) continue;
+      const r = roomRect(e);
+      if (!r) continue;
+
+      const overlapX = Math.min(out.x + out.w, r.x + r.w) - Math.max(out.x, r.x);
+      const overlapY = Math.min(out.y + out.h, r.y + r.h) - Math.max(out.y, r.y);
+      // Touching exactly, or already separated, is fine.
+      if (overlapX <= 0.5 || overlapY <= 0.5) continue;
+      // Drawing a room wholly inside a larger one is a legitimate thing to do.
+      const contains = (o: Rect, i: Rect) =>
+        i.x >= o.x - 1 && i.y >= o.y - 1 && i.x + i.w <= o.x + o.w + 1 && i.y + i.h <= o.y + o.h + 1;
+      if (contains(r, out) || contains(out, r)) continue;
+
+      // Distance to clear along each axis, landing flush with a wall between.
+      const pushLeft = r.x - t - (out.x + out.w);
+      const pushRight = r.x + r.w + t - out.x;
+      const pushUp = r.y - t - (out.y + out.h);
+      const pushDown = r.y + r.h + t - out.y;
+
+      const options: Array<{ dx: number; dy: number; cost: number }> = [
+        { dx: pushLeft, dy: 0, cost: Math.abs(pushLeft) },
+        { dx: pushRight, dy: 0, cost: Math.abs(pushRight) },
+        { dx: 0, dy: pushUp, cost: Math.abs(pushUp) },
+        { dx: 0, dy: pushDown, cost: Math.abs(pushDown) },
+      ];
+      options.sort((m, n) => m.cost - n.cost);
+      out = { ...out, x: out.x + options[0].dx, y: out.y + options[0].dy };
+      moved = true;
+    }
+
+    if (!moved) break;
+  }
+
+  return out;
+}
+
+/** Rooms that currently overlap each other — surfaced so the plan can say so. */
+export function overlappingRooms(project: Project): Set<ID> {
+  const rooms: Array<{ id: ID; r: Rect }> = [];
+  for (const id of project.order) {
+    const e = project.entities[id];
+    if (!e || e.type !== 'room' || e.hidden || e.auto) continue;
+    const r = roomRect(e);
+    if (r) rooms.push({ id, r });
+  }
+  const bad = new Set<ID>();
+  for (let i = 0; i < rooms.length; i++) {
+    for (let j = i + 1; j < rooms.length; j++) {
+      const a = rooms[i].r;
+      const b = rooms[j].r;
+      const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      if (ox > 1 && oy > 1) {
+        bad.add(rooms[i].id);
+        bad.add(rooms[j].id);
+      }
+    }
+  }
+  return bad;
 }

@@ -347,7 +347,34 @@ export function fuseCollinearWalls(project: Project): Project {
     flush();
   }
 
-  if (merges.length === 0) return project;
+  // A thin wall lying inside a thicker parallel one is not a second wall — it
+  // is the same wall. This is what makes a room drawn flush against the
+  // exterior shell share that shell rather than doubling it up.
+  const absorbed = new Map<ID, ID>();
+  for (const thin of walls) {
+    const lineThin = lineOf(thin);
+    if (!lineThin) continue;
+    for (const thick of walls) {
+      if (thick.id === thin.id || thick.thickness <= thin.thickness + 1) continue;
+      const lineThick = lineOf(thick);
+      if (!lineThick) continue;
+      // Same direction.
+      if (Math.abs(lineThin.dx - lineThick.dx) > 1e-3 || Math.abs(lineThin.dy - lineThick.dy) > 1e-3) continue;
+      // The thin centreline must fall within the thick wall's body.
+      const across = Math.abs(lineThin.offset - lineThick.offset);
+      if (across > (thick.thickness - thin.thickness) / 2 + COLLINEAR_TOL) continue;
+      // And its run must be covered by the thick wall's run.
+      const tLo = Math.min(along(lineThick, thin.a), along(lineThick, thin.b));
+      const tHi = Math.max(along(lineThick, thin.a), along(lineThick, thin.b));
+      const kLo = Math.min(along(lineThick, thick.a), along(lineThick, thick.b));
+      const kHi = Math.max(along(lineThick, thick.a), along(lineThick, thick.b));
+      if (tLo < kLo - COLLINEAR_TOL || tHi > kHi + COLLINEAR_TOL) continue;
+      absorbed.set(thin.id, thick.id);
+      break;
+    }
+  }
+
+  if (merges.length === 0 && absorbed.size === 0) return project;
 
   const entities = { ...project.entities };
   const doomed = new Set<ID>();
@@ -385,11 +412,31 @@ export function fuseCollinearWalls(project: Project): Project {
     }
   }
 
+  // Fold the absorbed thin walls in, moving their openings onto the host.
+  for (const [thinId, thickId] of absorbed) {
+    if (doomed.has(thinId) || doomed.has(thickId)) continue;
+    const host = entities[thickId];
+    const thin = entities[thinId];
+    if (!host || host.type !== 'wall' || !thin || thin.type !== 'wall') continue;
+    const hostLine = lineOf(host);
+    const hostLen = wallLength(host);
+    if (!hostLine || hostLen <= 0) continue;
+    for (const op of openingsOnWall(project, thinId)) {
+      const cur = entities[op.id];
+      if (!cur || (cur.type !== 'door' && cur.type !== 'window')) continue;
+      const world = wallPointAt(thin, op.t);
+      const tt = (along(hostLine, world) - along(hostLine, host.a)) / hostLen;
+      entities[op.id] = { ...cur, wallId: thickId, t: Math.max(0, Math.min(1, Math.abs(tt))) };
+    }
+    doomed.add(thinId);
+  }
+
   if (doomed.size === 0) return project;
 
   // Repoint every room at the surviving wall.
   const survivorOf = new Map<ID, ID>();
   for (const m of merges) for (const gone of m.absorb) survivorOf.set(gone.id, m.keep.id);
+  for (const [thinId, thickId] of absorbed) survivorOf.set(thinId, thickId);
 
   for (const id of project.order) {
     const e = entities[id];

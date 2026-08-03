@@ -71,6 +71,13 @@ or a total square footage in the Layout panel and the walls move to match.
 en-suite, puja room, utility, garage, balcony and the rest — each at a sensible
 size. Click one, click the plan, done.
 
+**Room sizes are clear internal dimensions**, the way a room is quoted. That
+means a stack of rooms needs its clear heights *plus* a wall between each pair:
+11' + 6' + 15' of rooms occupies 32'-8" of ground, not 32', the extra being the
+two 4" walls. Rooms are pushed apart rather than allowed to overlap, so when the
+arithmetic does not fit you can see it on the drawing instead of discovering it
+later.
+
 **Rooms share walls.** Place two rooms side by side and they land flush against
 each other with exactly one wall between them — not two stacked walls, not a
 sliver of a gap. Coincident walls are then fused into a single wall, and runs
@@ -148,6 +155,11 @@ never keep rubber-banding under a new tool.
 created, so typing a new width moves exactly those walls — and dragging the room
 carries its enclosure with it. When a wall ends up shared with a neighbour,
 editing one room clones it rather than dragging the neighbour along.
+
+**Walls are magnetic.** Room edges snap to the faces of any wall, the exterior
+shell included, and to neighbouring rooms. A room's own wall that ends up lying
+inside a thicker wall is absorbed by it, so drawing a room flush against the
+shell shares that shell rather than doubling it.
 
 **Neighbours outrank the grid.** A grid step is a foot and a wall is four
 inches, so a grid-snapped edge can never sit exactly one wall from its

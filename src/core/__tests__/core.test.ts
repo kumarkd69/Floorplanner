@@ -631,28 +631,34 @@ describe('side-by-side rooms', () => {
     expect(party).toBeTruthy();
   });
 
-  it('never fuses walls of different thickness', () => {
+  it('never joins walls of different thickness into one longer run', () => {
+    // Two collinear walls end to end. Different thicknesses means they are
+    // genuinely different walls — a partition meeting a party wall — so their
+    // runs must not be unioned.
     let p = blank();
-    const a = addRoom(p, { x: 0, y: 0, w: mmOfFeet(12), h: mmOfFeet(10) }, 'A');
-    p = a.project;
-    const { room, walls } = buildRoomBox(p, {
-      rect: { x: mmOfFeet(12) + 300, y: 0, w: mmOfFeet(10), h: mmOfFeet(10) },
-      name: 'B',
-      wallThickness: 300,
-      wallHeight: 2743,
-    });
-    const entities = { ...p.entities };
-    const order = [...p.order];
-    for (const e of [...walls, room]) {
-      entities[e.id] = e;
-      order.push(e.id);
-    }
-    p = { ...p, entities, order };
+    const thin: Wall = { ...makeWall(0, 0, 3000, 0), id: 'thin', thickness: 100 };
+    const thick: Wall = { ...makeWall(3000, 0, 9000, 0), id: 'thick', thickness: 300 };
+    p = { ...p, entities: { ...p.entities, thin, thick }, order: [...p.order, 'thin', 'thick'] };
 
     const before = Object.values(p.entities).filter((e) => e.type === 'wall').length;
     p = fuseCollinearWalls(p);
-    const after = Object.values(p.entities).filter((e) => e.type === 'wall').length;
-    expect(after).toBe(before);
+    expect(Object.values(p.entities).filter((e) => e.type === 'wall')).toHaveLength(before);
+  });
+
+  it('absorbs a thin wall that lies inside a thicker one', () => {
+    // A 4" partition drawn along the inside of a 12" shell wall is not a second
+    // wall; it is the shell. This is what lets a room drawn flush against the
+    // exterior share it instead of doubling it.
+    let p = blank();
+    const shell: Wall = { ...makeWall(0, 0, 9000, 0), id: 'shell', thickness: 300 };
+    const inside: Wall = { ...makeWall(1000, 100, 5000, 100), id: 'inside', thickness: 100 };
+    p = { ...p, entities: { ...p.entities, shell, inside }, order: [...p.order, 'shell', 'inside'] };
+
+    p = fuseCollinearWalls(p);
+    const walls = Object.values(p.entities).filter((e): e is Wall => e.type === 'wall');
+    expect(walls).toHaveLength(1);
+    expect(walls[0].id).toBe('shell');
+    expect(walls[0].thickness).toBe(300);
   });
 
   it('keeps a door in place when its wall is absorbed by a longer one', () => {
