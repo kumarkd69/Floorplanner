@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Home Structure — 3BHK Floor Plan</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171b21; --panel2:#1d222a; --ink:#e8ecf1; --muted:#93a0b2;
+    --line:#2b323c; --wall:#3a4453; --wall-ext:#e8ecf1; --accent:#5aa9ff; --window:#5aa9ff;
+    --door:#e8ecf1; --grid:#1c212a;
+    --living:#2c3b4a; --dining:#33413a; --kitchen:#4a3a2c; --bed:#3a2c4a; --bath:#2c4a47;
+    --store:#3a3f4a; --garage:#2a2f38; --corridor:#20242c;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:24px;
+  }
+  h1{margin:0 0 4px; font-size:22px; font-weight:600}
+  .sub{color:var(--muted); margin:0 0 20px; font-size:14px}
+  .layout{display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start}
+  .plan-wrap{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:16px; flex:1 1 640px; min-width:320px;
+  }
+  .plan-toolbar{display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap}
+  .plan-toolbar button{
+    background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:6px 12px; font-size:13px; cursor:pointer;
+  }
+  .plan-toolbar button.active{border-color:var(--accent); color:var(--accent)}
+  .plan-toolbar .spacer{flex:1}
+  svg{display:block; width:100%; height:auto; background:var(--grid); border-radius:8px}
+  .room-rect{stroke:var(--wall); stroke-width:2; cursor:default}
+  .room-rect:hover{filter:brightness(1.18)}
+  .room-label{fill:var(--ink); font-size:13px; font-weight:600; text-anchor:middle; pointer-events:none}
+  .room-area{fill:var(--muted); font-size:11px; text-anchor:middle; pointer-events:none}
+  .dim-line{stroke:var(--muted); stroke-width:1}
+  .dim-text{fill:var(--muted); font-size:11px; text-anchor:middle}
+  .exterior{fill:none; stroke:var(--wall-ext); stroke-width:6}
+  .window{stroke:var(--window); stroke-width:4}
+  .door-arc{fill:none; stroke:var(--muted); stroke-width:1; stroke-dasharray:3,3}
+  .door-leaf{stroke:var(--door); stroke-width:3}
+  .compass text{fill:var(--muted); font-size:11px}
+  .legend{display:flex; flex-wrap:wrap; gap:14px; margin-top:14px; font-size:12px; color:var(--muted)}
+  .legend span{display:inline-flex; align-items:center; gap:6px}
+  .swatch{width:12px; height:12px; border-radius:3px; display:inline-block}
+  .side{flex:0 0 320px; display:flex; flex-direction:column; gap:16px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px}
+  .card h2{margin:0 0 10px; font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th,td{text-align:left; padding:6px 4px; border-bottom:1px solid var(--line)}
+  th{color:var(--muted); font-weight:500; font-size:12px}
+  td.num, th.num{text-align:right}
+  tfoot td{font-weight:600; border-bottom:none; padding-top:8px}
+  .stat-row{display:flex; justify-content:space-between; padding:6px 0; font-size:13px; border-bottom:1px solid var(--line)}
+  .stat-row:last-child{border-bottom:none}
+  .stat-row .v{color:var(--accent); font-weight:600}
+  @media print{
+    body{background:#fff; color:#000; padding:0}
+    .side, .plan-toolbar{display:none}
+    .plan-wrap{border:none; padding:0}
+    svg{background:#fff}
+  }
+</style>
+</head>
+<body>
+
+<h1>Home Structure — 3BHK, Single Storey</h1>
+<p class="sub">Self-contained, runnable floor plan model — no build step, no server. Plot 54' × 30' (1,620 sq ft gross). Open this file directly in any browser.</p>
+
+<div class="layout">
+  <div class="plan-wrap">
+    <div class="plan-toolbar">
+      <button id="btn-dims" class="active">Dimensions</button>
+      <button id="btn-windows" class="active">Windows</button>
+      <button id="btn-labels" class="active">Room labels</button>
+      <div class="spacer"></div>
+      <button onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <svg id="plan" viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg">
+      <!-- grid -->
+      <defs>
+        <pattern id="grid" width="14" height="14" patternUnits="userSpaceOnUse">
+          <path d="M14 0H0V14" fill="none" stroke="#1a1f27" stroke-width="1"/>
+        </pattern>
+      </defs>
+      <rect x="0" y="0" width="900" height="560" fill="url(#grid)"/>
+
+      <!-- ===================== ROOMS ===================== -->
+      <g id="rooms">
+        <!-- Store Room -->
+        <rect class="room-rect" x="60" y="60" width="196" height="112" fill="var(--store)"/>
+        <text class="room-label" x="158" y="112">Store Room</text>
+        <text class="room-area" x="158" y="130">8' × 14' · 112 sq ft</text>
+
+        <!-- Puja Room -->
+        <rect class="room-rect" x="60" y="172" width="196" height="84" fill="var(--store)"/>
+        <text class="room-label" x="158" y="210">Puja Room</text>
+        <text class="room-area" x="158" y="228">6' × 14' · 84 sq ft</text>
+
+        <!-- Master Bedroom -->
+        <rect class="room-rect" x="256" y="60" width="196" height="196" fill="var(--bed)"/>
+        <text class="room-label" x="354" y="150">Master Bedroom</text>
+        <text class="room-area" x="354" y="168">14' × 14' · 196 sq ft</text>
+
+        <!-- Master Bath -->
+        <rect class="room-rect" x="452" y="60" width="84" height="196" fill="var(--bath)"/>
+        <text class="room-label" x="494" y="150">Master Bath</text>
+        <text class="room-area" x="494" y="168" font-size="10">6' × 14'</text>
+
+        <!-- Bedroom 2 -->
+        <rect class="room-rect" x="536" y="60" width="140" height="196" fill="var(--bed)"/>
+        <text class="room-label" x="606" y="150">Bedroom 2</text>
+        <text class="room-area" x="606" y="168">10' × 14' · 140 sq ft</text>
+
+        <!-- Bedroom 3 -->
+        <rect class="room-rect" x="676" y="60" width="140" height="196" fill="var(--bed)"/>
+        <text class="room-label" x="746" y="150">Bedroom 3</text>
+        <text class="room-area" x="746" y="168">10' × 14' · 140 sq ft</text>
+
+        <!-- Corridor -->
+        <rect class="room-rect" x="60" y="256" width="756" height="28" fill="var(--corridor)"/>
+        <text class="room-label" x="438" y="274" font-size="11">Corridor</text>
+
+        <!-- Garage -->
+        <rect class="room-rect" x="60" y="284" width="196" height="196" fill="var(--garage)"/>
+        <text class="room-label" x="158" y="374">Garage</text>
+        <text class="room-area" x="158" y="392">14' × 14' · 196 sq ft</text>
+
+        <!-- Living Room -->
+        <rect class="room-rect" x="256" y="284" width="252" height="196" fill="var(--living)"/>
+        <text class="room-label" x="382" y="374">Living Room</text>
+        <text class="room-area" x="382" y="392">18' × 14' · 252 sq ft</text>
+
+        <!-- Dining -->
+        <rect class="room-rect" x="508" y="284" width="112" height="196" fill="var(--dining)"/>
+        <text class="room-label" x="564" y="374">Dining</text>
+        <text class="room-area" x="564" y="392">8' × 14' · 112 sq ft</text>
+
+        <!-- Kitchen -->
+        <rect class="room-rect" x="620" y="284" width="196" height="196" fill="var(--kitchen)"/>
+        <text class="room-label" x="718" y="374">Kitchen</text>
+        <text class="room-area" x="718" y="392">14' × 14' · 196 sq ft</text>
+      </g>
+
+      <!-- ===================== DOORS ===================== -->
+      <g id="doors" stroke="var(--door)" fill="none">
+        <!-- Front entry: Living Room, south wall -->
+        <line class="door-leaf" x1="360" y1="480" x2="402" y2="480"/>
+        <path class="door-arc" d="M360 480 A42 42 0 0 0 402 438"/>
+
+        <!-- Garage door: wide roller opening, south wall -->
+        <line class="door-leaf" x1="72" y1="480" x2="244" y2="480" stroke-dasharray="8,4" stroke-width="4"/>
+
+        <!-- Kitchen back door: east wall -->
+        <line class="door-leaf" x1="816" y1="400" x2="816" y2="442"/>
+        <path class="door-arc" d="M816 400 A42 42 0 0 1 774 442"/>
+
+        <!-- Corridor <-> Master Bedroom -->
+        <line class="door-leaf" x1="330" y1="256" x2="366" y2="256"/>
+        <!-- Corridor <-> Master Bath -->
+        <line class="door-leaf" x1="476" y1="256" x2="500" y2="256"/>
+        <!-- Corridor <-> Bedroom 2 -->
+        <line class="door-leaf" x1="586" y1="256" x2="622" y2="256"/>
+        <!-- Corridor <-> Bedroom 3 -->
+        <line class="door-leaf" x1="726" y1="256" x2="762" y2="256"/>
+        <!-- Corridor <-> Store/Puja column -->
+        <line class="door-leaf" x1="140" y1="256" x2="176" y2="256"/>
+        <!-- Corridor <-> Living Room -->
+        <line class="door-leaf" x1="340" y1="284" x2="376" y2="284"/>
+        <!-- Corridor <-> Garage -->
+        <line class="door-leaf" x1="140" y1="284" x2="176" y2="284"/>
+        <!-- Living Room <-> Dining (open plan pass-through) -->
+        <line class="door-leaf" x1="508" y1="330" x2="508" y2="366"/>
+        <!-- Dining <-> Kitchen -->
+        <line class="door-leaf" x1="620" y1="330" x2="620" y2="366"/>
+      </g>
+
+      <!-- ===================== WINDOWS ===================== -->
+      <g id="windows" class="window">
+        <!-- Back wall (y=60): Store, Master Bed, Bedroom2, Bedroom3 -->
+        <line x1="100" y1="60" x2="140" y2="60"/>
+        <line x1="300" y1="60" x2="340" y2="60"/>
+        <line x1="360" y1="60" x2="400" y2="60"/>
+        <line x1="566" y1="60" x2="606" y2="60"/>
+        <line x1="706" y1="60" x2="746" y2="60"/>
+        <line x1="760" y1="60" x2="796" y2="60"/>
+
+        <!-- Left wall (x=60): Puja -->
+        <line x1="60" y1="195" x2="60" y2="230"/>
+        <!-- Left wall: Garage -->
+        <line x1="60" y1="320" x2="60" y2="360"/>
+
+        <!-- Right wall (x=816): Bedroom3, Master Bath -->
+        <line x1="816" y1="100" x2="816" y2="140"/>
+        <line x1="816" y1="180" x2="816" y2="220"/>
+
+        <!-- Front wall (y=480): Living Room, Dining, Kitchen -->
+        <line x1="270" y1="480" x2="310" y2="480"/>
+        <line x1="420" y1="480" x2="460" y2="480"/>
+        <line x1="530" y1="480" x2="570" y2="480"/>
+        <line x1="670" y1="480" x2="710" y2="480"/>
+        <line x1="730" y1="480" x2="770" y2="480"/>
+      </g>
+
+      <!-- ===================== EXTERIOR SHELL ===================== -->
+      <rect class="exterior" x="60" y="60" width="756" height="420"/>
+
+      <!-- ===================== DIMENSIONS ===================== -->
+      <g id="dims">
+        <!-- Overall width, bottom -->
+        <line class="dim-line" x1="60" y1="500" x2="816" y2="500"/>
+        <line class="dim-line" x1="60" y1="494" x2="60" y2="506"/>
+        <line class="dim-line" x1="816" y1="494" x2="816" y2="506"/>
+        <text class="dim-text" x="438" y="516">54'-0" overall</text>
+
+        <!-- Overall depth, right -->
+        <line class="dim-line" x1="836" y1="60" x2="836" y2="480"/>
+        <line class="dim-line" x1="830" y1="60" x2="842" y2="60"/>
+        <line class="dim-line" x1="830" y1="480" x2="842" y2="480"/>
+        <text class="dim-text" x="836" y="272" transform="rotate(90 836 272)">30'-0" overall</text>
+      </g>
+
+      <!-- compass -->
+      <g class="compass" transform="translate(858,80)">
+        <circle r="16" fill="none" stroke="var(--muted)"/>
+        <line x1="0" y1="-16" x2="0" y2="16" stroke="var(--muted)"/>
+        <line x1="-16" y1="0" x2="16" y2="0" stroke="var(--muted)"/>
+        <text x="-4" y="-20">N</text>
+      </g>
+    </svg>
+
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--living)"></i>Living / Dining</span>
+      <span><i class="swatch" style="background:var(--kitchen)"></i>Kitchen</span>
+      <span><i class="swatch" style="background:var(--bed)"></i>Bedrooms</span>
+      <span><i class="swatch" style="background:var(--bath)"></i>Bath</span>
+      <span><i class="swatch" style="background:var(--store)"></i>Store / Puja</span>
+      <span><i class="swatch" style="background:var(--garage)"></i>Garage</span>
+      <span><i class="swatch" style="background:var(--corridor)"></i>Corridor</span>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>Overview</h2>
+      <div class="stat-row"><span>Plot size</span><span class="v">54' × 30'</span></div>
+      <div class="stat-row"><span>Gross plot area</span><span class="v">1,620 sq ft</span></div>
+      <div class="stat-row"><span>Interior carpet area</span><span class="v" id="carpet-area">—</span></div>
+      <div class="stat-row"><span>Bedrooms</span><span class="v">3</span></div>
+      <div class="stat-row"><span>Bathrooms</span><span class="v">1 attached</span></div>
+      <div class="stat-row"><span>Storeys</span><span class="v">1</span></div>
+      <div class="stat-row"><span>Parking</span><span class="v">1 car garage</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Room schedule</h2>
+      <table id="schedule">
+        <thead><tr><th>Room</th><th class="num">Size</th><th class="num">Area</th></tr></thead>
+        <tbody>
+          <tr><td>Master Bedroom</td><td class="num">14' × 14'</td><td class="num">196 sq ft</td></tr>
+          <tr><td>Master Bath</td><td class="num">6' × 14'</td><td class="num">84 sq ft</td></tr>
+          <tr><td>Bedroom 2</td><td class="num">10' × 14'</td><td class="num">140 sq ft</td></tr>
+          <tr><td>Bedroom 3</td><td class="num">10' × 14'</td><td class="num">140 sq ft</td></tr>
+          <tr><td>Living Room</td><td class="num">18' × 14'</td><td class="num">252 sq ft</td></tr>
+          <tr><td>Dining</td><td class="num">8' × 14'</td><td class="num">112 sq ft</td></tr>
+          <tr><td>Kitchen</td><td class="num">14' × 14'</td><td class="num">196 sq ft</td></tr>
+          <tr><td>Garage</td><td class="num">14' × 14'</td><td class="num">196 sq ft</td></tr>
+          <tr><td>Store Room</td><td class="num">14' × 8'</td><td class="num">112 sq ft</td></tr>
+          <tr><td>Puja Room</td><td class="num">14' × 6'</td><td class="num">84 sq ft</td></tr>
+          <tr><td>Corridor</td><td class="num">54' × 2'</td><td class="num">108 sq ft</td></tr>
+        </tbody>
+        <tfoot><tr><td>Total</td><td class="num"></td><td class="num" id="total-area">—</td></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Notes</h2>
+      <p style="font-size:13px; color:var(--muted); line-height:1.5; margin:0">
+        This is an illustrative model — a starting layout, not a stamped drawing.
+        Areas shown are clear/carpet areas per room; wall thickness is drawn but not
+        subtracted from gross plot area. Edit the SVG coordinates in this file directly
+        to reshape rooms, or rebuild it precisely in the Floor Plan Creator app in this
+        repository (<code>npm run dev</code>) for full editing, snapping and export to
+        PNG / SVG / DXF / PDF.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Compute totals from the schedule table so the numbers can never drift from the SVG.
+  (function () {
+    var rows = document.querySelectorAll('#schedule tbody tr');
+    var total = 0;
+    rows.forEach(function (r) {
+      var text = r.children[2].textContent;
+      var n = parseInt(text, 10);
+      if (!isNaN(n)) total += n;
+    });
+    document.getElementById('total-area').textContent = total.toLocaleString() + ' sq ft';
+    document.getElementById('carpet-area').textContent = total.toLocaleString() + ' sq ft';
+  })();
+
+  // Toggle layers
+  function wire(btnId, groupId) {
+    var btn = document.getElementById(btnId);
+    var group = document.getElementById(groupId);
+    btn.addEventListener('click', function () {
+      btn.classList.toggle('active');
+      group.style.display = btn.classList.contains('active') ? '' : 'none';
+    });
+  }
+  wire('btn-dims', 'dims');
+  wire('btn-windows', 'windows');
+
+  document.getElementById('btn-labels').addEventListener('click', function () {
+    this.classList.toggle('active');
+    var on = this.classList.contains('active');
+    document.querySelectorAll('.room-label, .room-area').forEach(function (el) {
+      el.style.display = on ? '' : 'none';
+    });
+  });
+</script>
+</body>
+</html>
