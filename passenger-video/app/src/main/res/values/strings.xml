@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Passenger Screen</string>
+
+    <string name="add_folder">Add folder</string>
+    <string name="add_url">Add URL</string>
+    <string name="add">Add</string>
+    <string name="cancel">Cancel</string>
+    <string name="refresh">Refresh</string>
+    <string name="remove">Remove</string>
+
+    <string name="section_network">Network</string>
+    <string name="section_folders">Folders</string>
+    <string name="section_device">On this device</string>
+
+    <string name="url_hint">Video or HLS/DASH URL</string>
+    <string name="title_hint">Name (optional)</string>
+
+    <string name="empty_title">Nothing to watch yet</string>
+    <string name="empty_body">Add a folder of videos, or paste a direct video / HLS / DASH URL. Videos already on this device appear automatically once media access is granted.</string>
+
+    <string name="notice_title">For passenger screens only</string>
+    <string name="notice_body">This app is built for a rear-seat or passenger display. It has no CarPlay or Android Auto integration and cannot show video on a driver\'s head unit.\n\nDo not mount this device where the driver can see it while the vehicle is moving.</string>
+    <string name="notice_ack">I understand</string>
+
+    <string name="error_no_media">No video was supplied.</string>
+    <string name="error_playback">Playback failed: %1$s</string>
+</resources>
