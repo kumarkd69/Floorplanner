@@ -29,6 +29,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The action's default package set includes the obsolete "tools"
+          # package, which sdkmanager no longer publishes. The runner image
+          # already ships the SDK, and AGP fetches the platform and
+          # build-tools it needs, so install nothing extra here.
+          packages: ""
 
       - name: Cache Gradle
         uses: actions/cache@v4
