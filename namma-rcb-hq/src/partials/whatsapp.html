@@ -1,0 +1,29 @@
+<a class="wa-fab" href="{{whatsapp.groupInvite}}" data-wa-open aria-label="WhatsApp: join the community or chat with an admin">
+      <svg aria-hidden="true"><use href="#i-wa" /></svg>
+    </a>
+    <dialog class="sheet" id="wa-sheet" aria-labelledby="wa-sheet-title">
+      <div class="sheet__inner">
+        <div class="sheet__head">
+          <div>
+            <p class="label">The army talks here</p>
+            <h2 class="sheet__title" id="wa-sheet-title">Join us on WhatsApp</h2>
+          </div>
+          <button class="sheet__close" type="button" data-wa-close aria-label="Close">
+            <svg aria-hidden="true"><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <div class="sheet__actions">
+          <a class="sheet__action" href="{{whatsapp.groupInvite}}" target="_blank" rel="noopener">
+            <svg aria-hidden="true"><use href="#i-wa" /></svg>
+            <span><strong>Join the community</strong><small>Match-day plans, watch parties and event drops.</small></span>
+            <svg aria-hidden="true"><use href="#i-arrow" /></svg>
+          </a>
+          <a class="sheet__action" href="{{waAdmin}}" target="_blank" rel="noopener">
+            <svg aria-hidden="true"><use href="#i-wa" /></svg>
+            <span><strong>Chat with admin</strong><small>Questions, tickets, volunteering. We reply within a day.</small></span>
+            <svg aria-hidden="true"><use href="#i-arrow" /></svg>
+          </a>
+        </div>
+        <p class="sheet__note">Be kind, no spam, no ticket touting. Admins remove anyone who breaks the rules.</p>
+      </div>
+    </dialog>

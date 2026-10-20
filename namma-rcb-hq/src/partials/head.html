@@ -1,0 +1,17 @@
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0A0909" />
+    <meta name="color-scheme" content="dark" />
+    <script>
+      // Decide the motion mode before first paint so the at-rest frame matches beat 0.
+      (function () {
+        var d = document.documentElement;
+        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) d.classList.add('js-motion');
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Kannada:wght@500;700;800&family=Anek+Latin:wght@400;500;700&family=Anton&family=JetBrains+Mono:wght@500;600&display=swap" />
+    <link rel="stylesheet" href="/src/styles/tokens.css" />
+    <link rel="stylesheet" href="/src/styles/base.css" />
+    <link rel="stylesheet" href="/src/styles/layout.css" />
+    <link rel="stylesheet" href="/src/styles/components.css" />

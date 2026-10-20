@@ -1,0 +1,244 @@
+/* ---------- Grid ---------- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--gutter);
+  padding-inline: var(--margin);
+}
+
+/* ---------- Media + grade stack (shared by every chapter) ---------- */
+.media {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--ink-2) center / cover no-repeat;
+}
+.media > video,
+.media > canvas.ph {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.media__play {
+  position: absolute;
+  right: var(--margin);
+  bottom: 32px;
+  z-index: 3;
+}
+
+/* Grade: one multiply layer (warm red-black wash + vignette). Grain is a
+   single fixed overlay on <body> so it covers every image and video. */
+.grade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  mix-blend-mode: multiply;
+  background:
+    radial-gradient(120% 90% at 50% 45%, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, .8) 100%),
+    linear-gradient(170deg, #f3c9b9 0%, #c06a5f 50%, #5a2427 100%);
+}
+
+.ph-label {
+  position: absolute;
+  left: var(--margin);
+  bottom: 12px;
+  z-index: 4;
+  font: 500 10px/1.3 var(--f-mono);
+  letter-spacing: .1em;
+  color: rgba(243, 235, 221, .42);
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+/* ---------- Hero (Chapter 0) ---------- */
+.hero {
+  position: relative;
+  height: 100vh;
+  height: 100svh;
+  min-height: 560px;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--ink);
+}
+.hero .media { z-index: 0; }
+.hero__video { opacity: .4; }
+.js-motion .hero__video { opacity: 0; }
+.hero__flag {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+.hero .grade { z-index: 2; }
+
+.hero__top {
+  position: absolute;
+  z-index: 5;
+  top: calc(var(--header-h) + 20px);
+  left: 0;
+  right: 0;
+  align-items: start;
+}
+.hero__top .label:first-child { grid-column: 1 / span 4; }
+.hero__top .label:last-child { grid-column: 9 / -1; text-align: right; }
+
+.hero__crest {
+  position: absolute;
+  z-index: 4;
+  right: var(--margin);
+  top: calc(var(--header-h) + 72px);
+  width: clamp(112px, 17vw, 248px);
+  aspect-ratio: 5 / 6;
+}
+.hero__crest svg, .hero__crest img { width: 100%; height: 100%; }
+
+.hero__copy {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  bottom: clamp(150px, 24vh, 260px);
+}
+.hero__stack {
+  grid-column: 1 / span 9;
+  display: grid;
+}
+.hero__stack > * { grid-area: 1 / 1; align-self: end; }
+.hero__beat { max-width: 11ch; }
+.hero__beat--army { font-size: clamp(40px, 6.6vw, 104px); max-width: none; }
+.js-motion .hero__beat:not(.hero__beat--first) { visibility: hidden; }
+html:not(.js-motion) .hero__beat:not(.hero__beat--army) { display: none; }
+
+.hero__pulse {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+  bottom: clamp(96px, 16vh, 190px);
+  height: 90px;
+}
+
+.hero__cta {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 40px;
+  align-items: center;
+}
+.hero__cta-main { grid-column: 1 / span 4; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.hero__cta-extra { grid-column: 6 / span 4; }
+.hero__cta-extra p { font-size: 16px; color: var(--muted); max-width: 34ch; }
+.hero__scroll { grid-column: 10 / -1; justify-self: end; text-align: right; margin-right: 88px; }
+
+/* ---------- Chapter 1 — Namma Ooru ---------- */
+.ooru {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-block: clamp(120px, 22vh, 240px) clamp(120px, 20vh, 220px);
+  background: var(--ink);
+}
+.ooru > .media {
+  z-index: 0;
+  bottom: auto;
+  height: 100%;
+  clip-path: inset(0);
+}
+.ooru > .media .grade {
+  background:
+    linear-gradient(180deg, #0a0909 0%, rgba(10, 9, 9, 0) 18%, rgba(10, 9, 9, 0) 82%, #0a0909 100%),
+    linear-gradient(180deg, #b0574f 0%, #8a3a37 60%, #4a1c1f 100%);
+}
+.ooru > * { position: relative; z-index: 1; }
+.ooru > .media { position: absolute; }
+
+.ooru__head { row-gap: 20px; }
+.ooru__head .label { grid-column: 1 / span 4; }
+.ooru__title { grid-column: 1 / span 7; }
+.ooru__pulse { grid-column: 1 / -1; height: 70px; margin-top: 8px; }
+
+.ooru__rows {
+  margin-block: clamp(40px, 8vh, 96px);
+  display: grid;
+  gap: clamp(12px, 3vw, 44px);
+}
+.drift { white-space: nowrap; }
+.drift__track {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .3em;
+  will-change: transform;
+}
+.drift__item { display: inline-flex; align-items: baseline; gap: .22em; }
+.drift__item .label { font-size: clamp(11px, 1vw, 14px); color: var(--bone); transform: translateY(-1.6em); }
+.drift__sep {
+  font-family: var(--f-display);
+  font-size: calc(var(--t-kn) * .4);
+  color: var(--red);
+  align-self: center;
+}
+.drift--outline .kn-display {
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(243, 235, 221, .7);
+}
+.drift--red .kn-display { color: var(--red); }
+
+/* video-in-text row */
+.vtext { position: relative; display: inline-block; }
+.vtext__text { color: var(--bone); }
+.vtext.is-live .vtext__text { color: transparent; -webkit-text-stroke: 1px rgba(215, 38, 46, .35); }
+.vtext canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+.ooru__body { align-items: start; row-gap: 28px; }
+.ooru__lede {
+  grid-column: 7 / span 5;
+  font-size: clamp(20px, 1.7vw, 24px);
+  line-height: 1.5;
+}
+.ooru__meta { grid-column: 1 / span 4; grid-row: 1; display: grid; gap: 10px; align-content: start; }
+.ooru__meta .label b { color: var(--bone); font-weight: 500; }
+
+/* ---------- Inner page stub ---------- */
+.stub {
+  min-height: 100svh;
+  display: grid;
+  align-content: end;
+  padding-block: calc(var(--header-h) + 80px) 120px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.stub > *:not(.media) { position: relative; z-index: 3; }
+.stub .kn-display { grid-column: 1 / -1; }
+.stub p { grid-column: 1 / span 6; color: var(--muted); }
+
+/* ---------- Mobile ---------- */
+@media (max-width: 767px) {
+  .hero__top .label:first-child { grid-column: 1 / span 7; }
+  .hero__top .label:last-child { display: none; }
+  .hero__crest { top: calc(var(--header-h) + 52px); width: 104px; }
+  .hero__stack { grid-column: 1 / -1; }
+  .hero__copy { bottom: 210px; }
+  .hero__pulse { bottom: 170px; height: 60px; }
+  .hero__cta { bottom: 28px; row-gap: 16px; }
+  .hero__cta-main { grid-column: 1 / -1; }
+  .hero__cta-main .btn { flex: 1 1 100%; }
+  .hero__cta-extra { grid-column: 1 / -1; }
+  .hero__cta-extra p { font-size: 15px; }
+  .hero__scroll { display: none; }
+
+  .ooru__head .label, .ooru__title { grid-column: 1 / -1; }
+  .ooru__lede, .ooru__meta { grid-column: 1 / -1; grid-row: auto; }
+  .drift__item .label { transform: translateY(-1.2em); }
+  .stub p { grid-column: 1 / -1; }
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "watch-party-indiranagar",
+    "type": "Watch party",
+    "title": "Big-screen night, Indiranagar",
+    "date": "2026-11-08T19:00:00+05:30",
+    "venue": "Rooftop screening, 100 Feet Road",
+    "seats": 120,
+    "seatsLeft": 34,
+    "featured": true
+  },
+  {
+    "id": "gully-cup-hsr",
+    "type": "Meetup",
+    "title": "Gully Cup, HSR Layout",
+    "date": "2026-11-22T07:00:00+05:30",
+    "venue": "Community ground, Sector 2",
+    "seats": 64,
+    "seatsLeft": 0,
+    "featured": false
+  },
+  {
+    "id": "blood-drive-jayanagar",
+    "type": "Charity",
+    "title": "Army blood drive, Jayanagar",
+    "date": "2026-12-06T09:00:00+05:30",
+    "venue": "4th Block community hall",
+    "seats": 200,
+    "seatsLeft": 141,
+    "featured": false
+  }
+]

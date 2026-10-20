@@ -1,0 +1,36 @@
+:root {
+  --ink: #0A0909;
+  --ink-2: #120E0F;
+  --raised: #181314;
+  --line: #2D2324;
+  --red: #D7262E;
+  --red-deep: #7E1016;
+  --gold: #D4AA4F;
+  --gold-soft: #8A6B2C;
+  --bone: #F3EBDD;
+  --muted: #A89E92;
+  --wa: #25D366;
+
+  --f-display: "Anton", Impact, sans-serif;
+  --f-kn: "Anek Kannada", sans-serif;
+  --f-body: "Anek Latin", sans-serif;
+  --f-mono: "JetBrains Mono", monospace;
+
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-io: cubic-bezier(.65, 0, .35, 1);
+
+  /* type scale */
+  --t-kn: clamp(72px, 14vw, 220px);
+  --t-display: clamp(48px, 8vw, 128px);
+  --t-section: clamp(36px, 4.6vw, 64px);
+  --t-body: 18px;
+  --t-label: 12px;
+
+  /* editorial grid: 12 cols, 80px margins on a 1440 frame */
+  --margin: clamp(16px, 5.56vw, 80px);
+  --gutter: clamp(12px, 1.67vw, 24px);
+  --header-h: 72px;
+  --tap: 48px;
+
+  color-scheme: dark;
+}

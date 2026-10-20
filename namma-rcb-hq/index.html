@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Namma RCB HQ — The Army of Bengaluru</title>
+    <meta name="description" content="Namma RCB HQ is an unofficial, fan-run RCB army in Bengaluru. Watch parties, gully cricket, match-day meetups. Join us on WhatsApp." />
+    <!-- @include head -->
+  </head>
+  <body data-page="index">
+    <!-- @include sprite -->
+    <!-- @include header -->
+
+    <main id="main">
+      <!-- CH.00 — Hero -->
+      <section class="hero" data-scene="hero" aria-labelledby="hero-title">
+        <div class="media hero__video" data-media="hero-tunnel" data-kind="tunnel" data-webm {{poster:hero-tunnel}}></div>
+        <canvas class="hero__flag" aria-hidden="true"></canvas>
+        <div class="grade"></div>
+
+        <div class="hero__top grid">
+          <p class="label">CH.00 — The heartbeat</p>
+          <p class="label">12.9716° N · 77.5946° E — Bengaluru</p>
+        </div>
+
+        <div class="hero__crest" data-crest>
+          <svg viewBox="0 0 200 240" role="img" aria-label="Namma RCB HQ crest">
+            <use href="#crest" />
+            <g clip-path="url(#shield-clip)">
+              <rect class="hero__glint-bar" x="-60" y="0" width="60" height="240" fill="url(#glint-grad)" transform="skewX(-14)" />
+            </g>
+            <defs>
+              <linearGradient id="glint-grad" x1="0" x2="1">
+                <stop offset="0" stop-color="#FFE6A0" stop-opacity="0" />
+                <stop offset=".5" stop-color="#FFE6A0" stop-opacity=".75" />
+                <stop offset="1" stop-color="#FFE6A0" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        <div class="hero__pulse" data-pulse></div>
+
+        <div class="hero__copy grid">
+          <div class="hero__stack">
+            <p class="display hero__beat hero__beat--first" aria-hidden="true">Every city has a heartbeat.</p>
+            <p class="display hero__beat hero__beat--second" aria-hidden="true">Ours sounds different.</p>
+            <h1 id="hero-title" class="display hero__beat hero__beat--army">This isn't a fan club.<br /> This is an <span class="red">army.</span></h1>
+          </div>
+        </div>
+
+        <div class="hero__cta grid">
+          <div class="hero__cta-main">
+            <a class="btn btn--red" href="{{whatsapp.groupInvite}}" data-wa-open data-magnetic>
+              Join the army <svg class="btn__arrow" aria-hidden="true"><use href="#i-arrow" /></svg>
+            </a>
+          </div>
+          <div class="hero__cta-extra">
+            <p>Watch parties, gully cricket and match-day meetups across Bengaluru. Free to join. Run by fans.</p>
+          </div>
+          <p class="hero__scroll label" aria-hidden="true">Scroll — raise the flag</p>
+        </div>
+      </section>
+
+      <!-- CH.01 — Namma Ooru -->
+      <section class="ooru" id="namma-ooru" data-scene="ooru" aria-labelledby="ooru-title">
+        <div class="media" data-media="city-night" data-kind="city" data-cursor="play" {{poster:city-night}}>
+          <div class="grade"></div>
+        </div>
+
+        <div class="ooru__head grid">
+          <p class="label">CH.01 — Namma Ooru / Our city</p>
+          <h2 id="ooru-title" class="section-title ooru__title" data-split>Built in Bengaluru. <span class="red">Felt everywhere.</span></h2>
+          <div class="ooru__pulse" data-pulse data-pulse-under="#ooru-title"></div>
+        </div>
+
+        <div class="ooru__rows">
+          <p class="sr-only"><span lang="kn">ನಮ್ಮ ಊರು</span>, our city. <span lang="kn">ನಮ್ಮ ತಂಡ</span>, our team. <span lang="kn">ನಮ್ಮ ಸೇನೆ</span>, our army.</p>
+
+          <div class="drift" data-drift="0,-30" aria-hidden="true">
+            <div class="drift__track">
+              <span class="drift__item"><span class="kn-display" lang="kn">ನಮ್ಮ ಊರು</span><span class="label">Our city</span></span><span class="drift__sep">/</span>
+              <span class="drift__item"><span class="kn-display" lang="kn">ನಮ್ಮ ಊರು</span><span class="label">Our city</span></span><span class="drift__sep">/</span>
+              <span class="drift__item"><span class="kn-display" lang="kn">ನಮ್ಮ ಊರು</span><span class="label">Our city</span></span><span class="drift__sep">/</span>
+            </div>
+          </div>
+
+          <div class="drift drift--outline" data-drift="-30,0" aria-hidden="true">
+            <div class="drift__track">
+              <span class="drift__item"><span class="kn-display" lang="kn">ನಮ್ಮ ತಂಡ</span><span class="label">Our team</span></span><span class="drift__sep">/</span>
+              <span class="drift__item"><span class="kn-display" lang="kn">ನಮ್ಮ ತಂಡ</span><span class="label">Our team</span></span><span class="drift__sep">/</span>
+              <span class="drift__item"><span class="kn-display" lang="kn">ನಮ್ಮ ತಂಡ</span><span class="label">Our team</span></span><span class="drift__sep">/</span>
+            </div>
+          </div>
+
+          <div class="drift drift--red" data-drift="-6,-34" aria-hidden="true">
+            <div class="drift__track">
+              <span class="drift__item"><span class="vtext" data-vtext><span class="kn-display vtext__text" lang="kn">ನಮ್ಮ ಸೇನೆ</span></span><span class="label">Our army</span></span><span class="drift__sep">/</span>
+              <span class="drift__item"><span class="vtext" data-vtext><span class="kn-display vtext__text" lang="kn">ನಮ್ಮ ಸೇನೆ</span></span><span class="label">Our army</span></span><span class="drift__sep">/</span>
+              <span class="drift__item"><span class="vtext" data-vtext><span class="kn-display vtext__text" lang="kn">ನಮ್ಮ ಸೇನೆ</span></span><span class="label">Our army</span></span><span class="drift__sep">/</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ooru__body grid">
+          <div class="ooru__meta">
+            <p class="label">Home ground <b>Bengaluru, 560 001</b></p>
+            <p class="label">Signal <b>Every match night</b></p>
+            <p class="label">Members <b>Whoever shows up</b></p>
+          </div>
+          <p class="ooru__lede">It started on the footpath outside the stadium gates and in the back rooms of Indiranagar cafés. Now the chant carries from Malleshwaram to Melbourne. The city gave us the colours. We just never took them off.</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- @include footer -->
+    <!-- @include whatsapp -->
+    <!-- @include scripts -->
+  </body>
+</html>
