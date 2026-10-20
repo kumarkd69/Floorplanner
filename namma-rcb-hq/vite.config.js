@@ -45,7 +45,7 @@ function site() {
       server.watcher.on('add', refresh);
       server.watcher.on('unlink', refresh);
     },
-    transformIndexHtml(html, ctx) {
+    transformIndexHtml: { order: 'pre', handler(html, ctx) {
       const page = basename(ctx.filename, '.html');
       for (let i = 0; i < 3; i++) {
         html = html.replace(/<!--\s*@include (\w+)\s*-->/g, (_, name) =>
@@ -60,7 +60,7 @@ function site() {
             : '')
         .replace(/\{\{([\w.]+)\}\}/g, (_, key) => String(lookup(key) ?? ''))
         .replace(new RegExp(`data-nav="${page}"`, 'g'), `data-nav="${page}" aria-current="page"`);
-    },
+    } },
   };
 }
 
